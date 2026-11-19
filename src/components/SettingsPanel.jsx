@@ -2,7 +2,10 @@ import {
   ArrowUpRight, BookOpen, Check, FileText, LayoutList, ListMusic, Palette,
   Printer, RotateCcw, Type, WandSparkles, X,
 } from 'lucide-react';
-import { COLOR_PRESETS, FONT_STACKS, MARGIN_PRESETS, PAPER_SIZES, PAPER_TINTS } from '../lib/settings.js';
+import {
+  COLOR_PRESETS, FONT_STACKS, MARGIN_PRESETS, PAPER_SIZES, PAPER_TINTS,
+  getColumnCount, getGeometry, getTypeScale,
+} from '../lib/settings.js';
 import {
   ColorControl, PanelSection, RangeControl, Segmented, SelectControl, Toggle,
 } from './Controls.jsx';
@@ -39,7 +42,11 @@ export function SettingsPanel({
   book, settings, update, setMargin, onReset, onResetBook, onOpenContents, onPrint, isMobile, onClose,
 }) {
   const geometry = PAPER_SIZES[settings.paper];
+  const layoutGeometry = getGeometry(settings);
+  const columns = getColumnCount(settings, layoutGeometry);
+  const typeScale = getTypeScale(layoutGeometry, columns);
   const maxScale = (1 + settings.autoFitStrength / 100).toFixed(2);
+  const effective = (value) => `${(value * typeScale).toFixed(1)} px`;
 
   return (
     <aside className={`settings-panel${isMobile ? ' is-mobile' : ''}`}>
@@ -80,6 +87,19 @@ export function SettingsPanel({
             ]}
           />
 
+          <span className="control-label spaced"><span>Columns</span><span className="control-value">{columns} {columns === 1 ? 'column' : 'columns'}</span></span>
+          <Segmented
+            value={settings.columns}
+            columns={3}
+            ariaLabel="Print columns"
+            onChange={(value) => update('columns', value)}
+            options={[
+              { value: 'auto', label: 'Auto', hint: 'Two columns on landscape, one on portrait' },
+              { value: 'one', label: '1', hint: 'Single column' },
+              { value: 'two', label: '2', hint: 'Two columns, like Kytario print' },
+            ]}
+          />
+
           <span className="control-label spaced"><span>Margins</span></span>
           <div className="preset-row">
             {Object.entries(MARGIN_PRESETS).map(([key, preset]) => {
@@ -91,7 +111,7 @@ export function SettingsPanel({
                   onClick={() => setMargin(null, preset)}
                   key={key}
                 >
-                  {key === 'classic' && <Check size={12} />}
+                  {key === 'kytario' && <Check size={12} />}
                   {key[0].toUpperCase() + key.slice(1)}
                 </button>
               );
@@ -142,10 +162,13 @@ export function SettingsPanel({
             ))}
           </div>
 
-          <RangeControl label="Song title" value={settings.headingSize} min={20} max={52} unit=" px" onChange={(v) => update('headingSize', v)} />
-          <RangeControl label="Lyrics" value={settings.lyricsSize} min={9} max={22} step={0.25} unit=" px" onChange={(v) => update('lyricsSize', v)} />
-          <RangeControl label="Chords" value={settings.chordsSize} min={6.5} max={17} step={0.25} unit=" px" onChange={(v) => update('chordsSize', v)} />
-          <RangeControl label="Line height" value={settings.lineHeight} min={1.2} max={2} step={0.02} onChange={(v) => update('lineHeight', v)} format={(v) => v.toFixed(2)} />
+          <RangeControl label="Song title" value={settings.headingSize} min={9} max={26} step={0.5} format={effective} onChange={(v) => update('headingSize', v)} />
+          <RangeControl label="Lyrics" value={settings.lyricsSize} min={8} max={20} step={0.25} format={effective} onChange={(v) => update('lyricsSize', v)} />
+          <RangeControl label="Chords" value={settings.chordsSize} min={8} max={20} step={0.25} format={effective} onChange={(v) => update('chordsSize', v)} />
+          <RangeControl label="Line height" value={settings.lineHeight} min={0.9} max={1.8} step={0.02} onChange={(v) => update('lineHeight', v)} format={(v) => v.toFixed(2)} />
+          <p className="control-note">
+            Sizes scale with the column width, so A4, A5 and Letter keep Kytario’s line lengths.
+          </p>
         </PanelSection>
 
         <PanelSection icon={Palette} title="Ink & paper">
@@ -218,8 +241,8 @@ export function SettingsPanel({
             <div className="autofit-info">
               <span className="autofit-info-icon"><WandSparkles size={14} /></span>
               <p>
-                Up to <strong>{maxScale}×</strong> larger, without changing page size.
-                Long songs keep their natural flow across pages.
+                Up to <strong>{maxScale}×</strong> larger on a short song.
+                Long songs are shrunk just enough to stay on one page.
               </p>
             </div>
           </div>
@@ -229,8 +252,8 @@ export function SettingsPanel({
           <div className="toggle-stack">
             <Toggle label="Cover page" hint="A title page with the book name and description." checked={settings.cover} onChange={(v) => update('cover', v)} />
             <Toggle label="Table of contents" hint="Page numbers are filled in automatically." checked={settings.contents} onChange={(v) => update('contents', v)} />
-            <Toggle label="Song details" hint="Author, key, capo and tempo under the title." checked={settings.showMetadata} onChange={(v) => update('showMetadata', v)} />
-            <Toggle label="Section labels" hint="Verse, chorus and bridge headings." checked={settings.showSectionLabels} onChange={(v) => update('showSectionLabels', v)} />
+            <Toggle label="Song details" hint="Interpreter and capo beside the title." checked={settings.showMetadata} onChange={(v) => update('showMetadata', v)} />
+            <Toggle label="Section labels" hint="Verse and chorus names in the left gutter." checked={settings.showSectionLabels} onChange={(v) => update('showSectionLabels', v)} />
           </div>
           <SelectControl
             label="Song order"

@@ -158,7 +158,7 @@ export function ImportScreen({
             </div>
             <div className="floating-chip chip-format">
               <span className="chip-icon"><FileText size={14} /></span>
-              <span><strong>A4 · Portrait</strong><small>ready for PDF</small></span>
+              <span><strong>A4 · Landscape</strong><small>2 columns · 1 song / page</small></span>
             </div>
           </div>
         </section>
@@ -171,11 +171,11 @@ export function ImportScreen({
         </div>
         <div className="feature">
           <span className="feature-icon"><WandSparkles size={19} /></span>
-          <div><strong>Auto-fit that reads well</strong><p>Short songs grow in size and breathing room. Long songs keep flowing.</p></div>
+          <div><strong>Auto-fit that reads well</strong><p>Short songs grow. Long songs shrink just enough to stay on one page.</p></div>
         </div>
         <div className="feature">
           <span className="feature-icon"><Printer size={19} /></span>
-          <div><strong>Print or save as PDF</strong><p>A4, A5, Letter or B5. Margins, colors and type — all yours.</p></div>
+          <div><strong>Kytario-style print</strong><p>Two columns, section names in the margin, chords over lyrics. A4, A5, Letter or B5.</p></div>
         </div>
       </section>
 

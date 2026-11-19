@@ -1,153 +1,207 @@
-import { FONT_STACKS } from '../lib/settings.js';
-import { displayAuthor, songMetaParts } from '../lib/song.js';
+import { useLayoutEffect, useRef } from 'react';
+import {
+  FONT_STACKS, KYTARIO_PALETTE, getColumnCount, getTypeScale,
+} from '../lib/settings.js';
 
 const NBSP = '\u00a0';
+const CHORUS_TITLE_RE = /ref|cho/i;
 
-function styleVars(settings, scale = 1) {
+function styleVars(settings, { columns, typeScale, scale }) {
+  const lyricPx = settings.lyricsSize * typeScale * scale;
+  const chordPx = settings.chordsSize * typeScale * scale;
+  const headingPx = settings.headingSize * typeScale * scale;
   return {
-    '--base-heading': `${settings.headingSize}px`,
-    '--base-lyrics': `${settings.lyricsSize}px`,
-    '--base-chord': `${settings.chordsSize}px`,
-    '--base-line-height': settings.lineHeight,
-    '--song-scale': String(scale),
-    '--song-air': String(1 + Math.max(0, scale - 1) * 0.9),
+    '--sheet-columns': String(columns),
+    '--lyric-font': `${lyricPx}px`,
+    '--chord-font': `${chordPx}px`,
+    '--heading-font': `${headingPx}px`,
+    '--label-font': `${lyricPx * 0.7}px`,
+    '--chord-row-h': `${chordPx * 1.12}px`,
+    '--lyric-row-h': `${lyricPx * settings.lineHeight}px`,
+    '--header-h': `${lyricPx * 1.76}px`,
     '--font-body': FONT_STACKS[settings.fontFamily]?.stack ?? FONT_STACKS.inter.stack,
     '--heading-color': settings.headingColor,
     '--lyrics-color': settings.lyricsColor,
     '--chords-color': settings.chordsColor,
+    '--section-rule': KYTARIO_PALETTE.rule,
+    '--badge-bg': KYTARIO_PALETTE.badge,
   };
 }
 
-function SongHeader({ song, index, showMetadata = true }) {
-  const meta = songMetaParts(song);
-  const hasMeta = showMetadata && meta.length > 0;
+/**
+ * Kytario never wraps a lyric line. Very long lines are scaled down instead,
+ * so the chords stay glued to the word they belong to.
+ */
+function useLineScale(enabled) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    if (!enabled) return;
+    const el = ref.current;
+    if (!el) return;
+    const available = el.clientWidth;
+    if (!available) return;
+    const needed = el.scrollWidth;
+    const next = needed > available + 0.75
+      ? String(Math.max(0.34, available / needed))
+      : '1';
+    // Only touch the DOM when the value changes; this keeps the measurement
+    // pass over a 500-song book from thrashing layout.
+    if (el.style.getPropertyValue('--line-scale') !== next) {
+      el.style.setProperty('--line-scale', next);
+    }
+  });
+  return ref;
+}
+
+function SongHeader({ song, index, settings }) {
+  const author = song.author || null;
+  const capo = settings.showMetadata && song.capo > 0 ? `(capo ${song.capo})` : null;
   return (
     <header className="song-header" data-song-header>
-      <div className="song-header-top">
-        <span className="song-number" aria-hidden="true">
-          {String(index + 1).padStart(2, '0')}
-        </span>
-        <h1 className="song-title">{song.name}</h1>
-      </div>
-      {hasMeta && <p className="song-meta">{meta.join('  ·  ')}</p>}
-      <div className="song-rule" aria-hidden="true">
-        <span />
-      </div>
+      <span className="song-number" aria-hidden="true">{index + 1}</span>
+      <h1 className="song-title">
+        {author ? `${song.name} - ${author}` : song.name}
+        {capo && <span className="song-capo">{capo}</span>}
+      </h1>
     </header>
   );
 }
 
-function Line({ line }) {
-  if (line.kind === 'gap') {
-    return <div className="song-gap" data-line />;
-  }
-  if (line.kind === 'reference') {
-    return (
-      <div className="song-reference" data-line>
-        <span className="reference-glyph" aria-hidden="true">↻</span>
-        <span>{line.label}</span>
-      </div>
-    );
-  }
-
-  const hasChord = line.segments.some((segment) => segment.chord);
-  const hasLyric = line.segments.some((segment) => segment.text.trim());
+function SongInterpreter({ song }) {
   return (
-    <div
-      className={[
-        'song-line',
-        hasChord ? 'with-chords' : 'no-chords',
-        hasLyric ? '' : 'chord-only',
-      ].filter(Boolean).join(' ')}
-      data-line
-    >
-      {line.prefix && <span className="repeat-mark repeat-start">{line.prefix}</span>}
-      {line.segments.map((segment, index) => (
-        <span
-          className={[
-            'seg',
-            segment.chord ? 'has-chord' : '',
-            segment.chordOnly ? 'chord-only' : '',
-          ].filter(Boolean).join(' ')}
-          key={index}
-        >
-          {hasChord && (
-            <span className={`seg-chord${segment.chord === 'X' ? ' no-chord' : ''}`}>
-              {segment.chord || NBSP}
-            </span>
-          )}
-          {(hasLyric || segment.text) && (
-            <span className="seg-lyric">{segment.text || NBSP}</span>
-          )}
-        </span>
-      ))}
-      {line.suffix && <span className="repeat-mark repeat-end">{line.suffix}</span>}
+    <div className="song-interpreter" data-song-interpreter>
+      As performed by {song.interpreter}
     </div>
   );
 }
 
-function SectionBody({ section, lineStart = 0, lineEnd = section.lines.length, continued = false, showLabel = true }) {
-  const lines = section.lines.slice(lineStart, lineEnd);
-  const heading = showLabel && section.title;
-  if (!heading && lines.length === 0) return null;
+function InlineItem({ item }) {
+  if (item.t === 'chord') return <span className="inline-chord">{item.v}</span>;
+  if (item.t === 'bar') return <span className="inline-bar">|</span>;
+  if (item.t === 'ref') return <span className="inline-ref">{item.v}</span>;
+  if (item.t === 'text') return <span>{item.v}</span>;
+  if (item.t === 'space') {
+    return <span className="inline-space" style={{ width: `${item.em}em` }} />;
+  }
+  if (item.t === 'dash') return <span className="inline-dash">-</span>;
+  if (item.t === 'repeatStart') {
+    return (
+      <span className="inline-repeat">
+        {' '}
+        <span className="repeat-glyph">|∶</span>
+        {item.count > 2 ? ` ${item.count}× ` : ' '}
+      </span>
+    );
+  }
+  if (item.t === 'repeatEnd') {
+    return (
+      <span className="inline-repeat">
+        {' '}
+        <span className="repeat-glyph">∶|</span>
+        {item.count > 2 ? ` ${item.count}× ` : ' '}
+      </span>
+    );
+  }
+  return null;
+}
+
+function ChordLine({ line, showChords, scaleLines }) {
+  const ref = useLineScale(scaleLines);
   return (
-    <section className="song-section" data-section>
-      {heading && (
-        <h2 className="section-heading" data-section-heading>
-          <span>{section.title}</span>
-          {continued && <span className="section-cont">cont.</span>}
-        </h2>
+    <div className={`song-line${showChords ? ' has-chords' : ''}`} ref={ref}>
+      {line.segments.map((segment, index) => {
+        // `+` sections lose their chords (and bars) in the printed two-column
+        // layout, exactly like Kytario.
+        if (!showChords && segment.bar) return null;
+        if (!showChords && !segment.spaceEm && !segment.text) return null;
+        const hasChord = segment.chords.length > 0 || segment.bar;
+        return (
+          <span className="seg" key={index}>
+            {showChords && (
+              <span className="seg-chord">
+                {segment.bar
+                  ? <span className="seg-bar-glyph">|</span>
+                  : segment.chords.join(' ')}
+              </span>
+            )}
+            {segment.spaceEm ? (
+              <span className="seg-space" style={{ width: `${segment.spaceEm}em` }} />
+            ) : (
+              <span className="seg-lyric">
+                {segment.text || (hasChord ? NBSP : '')}
+              </span>
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function InlineLine({ line, scaleLines }) {
+  const ref = useLineScale(scaleLines);
+  return (
+    <div className="song-line inline-line" ref={ref}>
+      {line.items.map((item, index) => <InlineItem item={item} key={index} />)}
+    </div>
+  );
+}
+
+function SongSection({ section, settings, hideExpandableChords, scaleLines }) {
+  const hideChords = section.expandable && hideExpandableChords;
+  const showLabel = settings.showSectionLabels && Boolean(section.title);
+  const visibleChords = section.hasChords && !hideChords;
+  const chorus = CHORUS_TITLE_RE.test(section.title);
+  const className = [
+    'song-section',
+    section.unnamed ? 'is-instrumental' : '',
+    chorus ? 'is-chorus' : '',
+    section.hasChords ? 'has-chords' : '',
+    showLabel ? 'has-label' : 'no-label',
+  ].filter(Boolean).join(' ');
+
+  return (
+    <section className={className} data-section data-has-chords={section.hasChords ? 'true' : 'false'}>
+      {showLabel && (
+        <span className="section-label" aria-hidden="true">
+          {visibleChords && <span className="section-label-spacer" />}
+          <span className="section-label-text">{section.title}</span>
+        </span>
       )}
       <div className="section-lines">
-        {lines.map((line, index) => (
-          <Line line={line} key={index} />
+        {section.lines.map((line, index) => (
+          line.kind === 'inline'
+            ? <InlineLine line={line} scaleLines={scaleLines} key={index} />
+            : <ChordLine line={line} showChords={!hideChords} scaleLines={scaleLines} key={index} />
         ))}
       </div>
     </section>
   );
 }
 
-export function SongPageContent({ page, settings, totalSongs }) {
-  const { song, sections, pageInSong, fit } = page;
-  const scale = fit?.scale ?? 1;
+function SongSheet({
+  song, index, settings, columns, typeScale, scale, measurement = false, style, overflow = false,
+}) {
+  const showInterpreter = settings.showMetadata
+    && song.interpreter
+    && song.interpreter !== song.author;
   return (
-    <div className="song-page-inner" style={styleVars(settings, scale)}>
-      {pageInSong === 0 && <SongHeader song={song} index={page.songIndex} showMetadata={settings.showMetadata} />}
-      {sections.map((part) => {
-        const section = song.sections[part.index];
-        if (!section) return null;
-        return (
-          <SectionBody
-            section={section}
-            lineStart={part.lineStart}
-            lineEnd={part.lineEnd}
-            continued={part.continued}
-            showLabel={settings.showSectionLabels}
-            key={`${part.index}-${part.lineStart}`}
-          />
-        );
-      })}
-      {pageInSong > 0 && (
-        <div className="page-continuation-mark" aria-hidden="true">
-          {song.name} · {pageInSong + 1}/{page.pageCount}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Hidden tree used to measure natural section/line heights and find each
- * song's auto-fit scale.
- */
-export function SongMeasureBlock({ song, index, settings }) {
-  return (
-    <div className="song-page-inner measure-song" data-measure-song data-song-index={index} style={styleVars(settings, 1)}>
-      <SongHeader song={song} index={index} showMetadata={settings.showMetadata} />
+    <div
+      className={`song-sheet${measurement ? ' measure-sheet' : ''}`}
+      data-columns={columns}
+      data-overflow={overflow ? 'true' : undefined}
+      data-measure-song={measurement ? 'true' : undefined}
+      data-song-index={measurement ? index : undefined}
+      style={{ ...styleVars(settings, { columns, typeScale, scale }), ...style }}
+    >
+      <SongHeader song={song} index={index} settings={settings} />
+      {showInterpreter && <SongInterpreter song={song} />}
       {song.sections.map((section, sectionIndex) => (
-        <SectionBody
+        <SongSection
           section={section}
-          showLabel={settings.showSectionLabels}
+          settings={settings}
+          hideExpandableChords={columns === 2}
+          scaleLines={!measurement}
           key={sectionIndex}
         />
       ))}
@@ -155,13 +209,37 @@ export function SongMeasureBlock({ song, index, settings }) {
   );
 }
 
-export function SongMetaLine({ song }) {
-  const author = displayAuthor(song);
-  const meta = songMetaParts(song);
+export function SongPageContent({ page, settings, geometry }) {
+  const columns = getColumnCount(settings, geometry);
+  const typeScale = getTypeScale(geometry, columns);
   return (
-    <span>
-      {author ? `${author} · ` : ''}
-      {meta.slice(author ? 1 : 0).join(' · ')}
-    </span>
+    <SongSheet
+      song={page.song}
+      index={page.songIndex}
+      settings={settings}
+      columns={columns}
+      typeScale={typeScale}
+      scale={page.fit?.scale ?? 1}
+      overflow={Boolean(page.fit?.overflow)}
+    />
+  );
+}
+
+/**
+ * Hidden copy used to measure each song at scale 1. It uses the exact same
+ * component tree, so the measured section heights match the printed page.
+ */
+export function SongMeasureBlock({ song, index, settings, geometry, columns, typeScale }) {
+  return (
+    <SongSheet
+      song={song}
+      index={index}
+      settings={settings}
+      columns={columns}
+      typeScale={typeScale}
+      scale={1}
+      measurement
+      style={{ height: `${geometry.contentHeightPx}px` }}
+    />
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Minus, Plus,
-  ListMusic, Printer, Settings2, Sparkles, Loader2,
+  ListMusic, Printer, Settings2, Sparkles, Loader2, TriangleAlert,
 } from 'lucide-react';
 import { PaperPage } from './PaperPage.jsx';
 
@@ -42,6 +42,40 @@ function PageNavigator({ currentPage, pageCount, onChange }) {
         <ChevronsRight size={15} />
       </button>
     </div>
+  );
+}
+
+function FitChip({ fit }) {
+  if (!fit) return null;
+  if (fit.overflow) {
+    return (
+      <span className="fit-chip is-overflow" title="This song is still longer than one page, even at the smallest comfortable size. Lines past the page edge are clipped.">
+        <TriangleAlert size={12} />
+        Too long — clipped
+      </span>
+    );
+  }
+  if (fit.shrunk) {
+    return (
+      <span className="fit-chip is-shrunk" title="The type was reduced so the whole song fits on one page.">
+        <Sparkles size={12} />
+        Shrunk to {Math.round(fit.scale * 100)}%
+      </span>
+    );
+  }
+  if (fit.autoFitted) {
+    return (
+      <span className="fit-chip is-fitted" title="Automatic type size for this song">
+        <Sparkles size={12} />
+        Auto-fit {fit.scale.toFixed(2)}×
+      </span>
+    );
+  }
+  return (
+    <span className="fit-chip" title="The song fits on one page at its natural size">
+      <Sparkles size={12} />
+      One page
+    </span>
   );
 }
 
@@ -93,12 +127,7 @@ export function PreviewStage({
       <div className="preview-toolbar">
         <div className="preview-toolbar-left">
           {result && <PageNavigator currentPage={currentPage} pageCount={result.pageCount} onChange={onPageChange} />}
-          {activeSongFit && (
-            <span className={`fit-chip${activeSongFit.autoFitted ? ' is-fitted' : ''}`} title="Automatic type size for this song">
-              <Sparkles size={12} />
-              {activeSongFit.autoFitted ? `Auto-fit ${activeSongFit.scale.toFixed(2)}×` : 'Natural size'}
-            </span>
-          )}
+          <FitChip fit={activeSongFit} />
         </div>
         <div className="preview-toolbar-right">
           <button type="button" className="toolbar-button" onClick={onOpenContents}>
@@ -162,7 +191,7 @@ export function PreviewStage({
         {result && (
           <div className="stage-caption">
             <span>{page?.type === 'cover' ? 'Cover' : page?.type === 'contents' ? 'Contents' : page?.song?.name}</span>
-            <span>{settings.paper} · {settings.orientation}</span>
+            <span>{settings.paper} · {settings.orientation} · {result?.columns ?? 2} col</span>
           </div>
         )}
       </div>

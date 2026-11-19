@@ -1,10 +1,13 @@
 import { useLayoutEffect, useRef } from 'react';
 import { measureAndPaginate } from '../lib/paginate.js';
+import { getColumnCount, getTypeScale } from '../lib/settings.js';
 import { SongMeasureBlock } from './SongView.jsx';
 
 export function MeasurementLayer({ book, settings, geometry, onMeasured }) {
   const rootRef = useRef(null);
   const runRef = useRef(0);
+  const columns = getColumnCount(settings, geometry);
+  const typeScale = getTypeScale(geometry, columns);
 
   useLayoutEffect(() => {
     const root = rootRef.current;
@@ -34,7 +37,7 @@ export function MeasurementLayer({ book, settings, geometry, onMeasured }) {
     return () => {
       cancelled = true;
     };
-  }, [book, settings, geometry.contentWidthPx, onMeasured]);
+  }, [book, settings, columns, typeScale, geometry.contentWidthPx, geometry.contentHeightPx, onMeasured]);
 
   return (
     <div className="measurement-layer" aria-hidden="true">
@@ -44,7 +47,15 @@ export function MeasurementLayer({ book, settings, geometry, onMeasured }) {
         style={{ width: `${geometry.contentWidthPx}px` }}
       >
         {book.songs.map((song, index) => (
-          <SongMeasureBlock song={song} index={index} settings={settings} key={song.id ?? index} />
+          <SongMeasureBlock
+            song={song}
+            index={index}
+            settings={settings}
+            geometry={geometry}
+            columns={columns}
+            typeScale={typeScale}
+            key={song.id ?? index}
+          />
         ))}
       </div>
     </div>

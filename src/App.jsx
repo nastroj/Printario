@@ -17,6 +17,7 @@ function getLayoutKey(settings) {
   return JSON.stringify({
     paper: settings.paper,
     orientation: settings.orientation,
+    columns: settings.columns,
     margins: settings.margins,
     fontFamily: settings.fontFamily,
     headingSize: settings.headingSize,
@@ -231,6 +232,14 @@ export default function App() {
     setResult({ ...next, settings: { ...next.settings, ...appearanceRef.current } });
     setCurrentPage(target);
     setMeasuring(false);
+    const overflowing = (next.fits ?? []).filter((fit) => fit.overflow).length;
+    if (overflowing > 0) {
+      showToast(
+        `${overflowing} ${overflowing === 1 ? 'song is' : 'songs are'} too long for one page, even after shrinking. `
+        + 'The preview marks them so you can shorten or split the song.',
+        'error',
+      );
+    }
   }, [showToast]);
 
   const importFromApi = useCallback(async (url) => {

@@ -98,9 +98,6 @@ export function PaperPage({ page, book, settings, geometry, className = '' }) {
     '--heading-color': settings.headingColor,
     '--lyrics-color': settings.lyricsColor,
     '--chords-color': settings.chordsColor,
-    '--base-heading': `${settings.headingSize}px`,
-    '--base-lyrics': `${settings.lyricsSize}px`,
-    '--base-chord': `${settings.chordsSize}px`,
     '--font-body': settings.fontFamily === 'lora'
       ? '"Lora Variable", Lora, Georgia, serif'
       : settings.fontFamily === 'mono'
@@ -120,7 +117,7 @@ export function PaperPage({ page, book, settings, geometry, className = '' }) {
       {page.type === 'song' && (
         <>
           <div className="page-content">
-            <SongPageContent page={page} settings={settings} totalSongs={book.songs.length} />
+            <SongPageContent page={page} settings={settings} geometry={geometry} />
           </div>
           <PageFooter page={page} book={book} settings={settings} />
         </>
