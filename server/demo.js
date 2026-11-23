@@ -1,6 +1,6 @@
 /**
  * A tiny, original demo songbook. These lyrics are written for Printario so
- * the print preview and auto-fit can be explored without importing a book.
+ * the print preview can be explored without importing a book.
  */
 
 const CHORD_RE = /\{([^}]+)\}/g;
@@ -141,7 +141,7 @@ const songs = [
 export const demoSongbook = {
   token: 'printario-demo',
   name: 'Songs for the Slow Road',
-  description: 'An original three-song demo. Short, long, and somewhere in between — made to show off auto-fit and page flow.',
+  description: 'An original three-song demo. Short, long, and somewhere in between — made to show page flow.',
   projectName: 'Printario Studio',
   projectToken: null,
   sourceUrl: 'https://kytario.com/songbook',

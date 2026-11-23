@@ -3,14 +3,14 @@ import {
   Download, Info, Plus, Printer, Settings2, Sparkles, X,
 } from 'lucide-react';
 import { ImportScreen } from './components/ImportScreen.jsx';
-import { MeasurementLayer } from './components/MeasurementLayer.jsx';
 import { PreviewStage } from './components/PreviewStage.jsx';
 import { SettingsPanel } from './components/SettingsPanel.jsx';
 import { SongDrawer } from './components/SongDrawer.jsx';
 import { Brand } from './components/Brand.jsx';
 import { PaperPage } from './components/PaperPage.jsx';
 import { buildBookModel } from './lib/song.js';
-import { DEFAULT_SETTINGS, getGeometry, loadSettings, saveSettings } from './lib/settings.js';
+import { paginateBook } from './lib/paginate.js';
+import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './lib/settings.js';
 import { addRecent, cacheSongbook, loadRecent, readCachedSongbook } from './lib/storage.js';
 
 function getLayoutKey(settings) {
@@ -28,9 +28,6 @@ function getLayoutKey(settings) {
     contents: settings.contents,
     showMetadata: settings.showMetadata,
     showSectionLabels: settings.showSectionLabels,
-    autoFit: settings.autoFit,
-    autoFitStrength: settings.autoFitStrength,
-    autoFitFill: settings.autoFitFill,
     songOrder: settings.songOrder,
   });
 }
@@ -41,7 +38,6 @@ function getAppearance(settings) {
     lyricsColor: settings.lyricsColor,
     chordsColor: settings.chordsColor,
     paperTint: settings.paperTint,
-    pageNumbers: settings.pageNumbers,
   };
 }
 
@@ -110,14 +106,11 @@ function StudioHeader({ book, onNewBook, onPrint, onOpenSettings, installPrompt,
 
 export default function App() {
   const [settings, setSettings] = useState(loadSettings);
-  const [appliedSettings, setAppliedSettings] = useState(settings);
   const [sourceData, setSourceData] = useState(null);
   const [result, setResult] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [importing, setImporting] = useState(false);
-  const [measuring, setMeasuring] = useState(false);
   const [settingsPending, setSettingsPending] = useState(false);
-  const [measureToken, setMeasureToken] = useState(0);
   const [importError, setImportError] = useState(null);
   const [recent, setRecent] = useState(loadRecent);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -129,9 +122,12 @@ export default function App() {
   const toastTimer = useRef(null);
   const resultRef = useRef(null);
   const currentPageRef = useRef(0);
-  const appearanceRef = useRef(getAppearance(settings));
   const layoutKey = useMemo(() => getLayoutKey(settings), [settings]);
   const appliedLayoutRef = useRef(layoutKey);
+  const book = useMemo(
+    () => (sourceData ? buildBookModel(sourceData, settings.songOrder) : null),
+    [sourceData, settings.songOrder],
+  );
 
   useEffect(() => {
     resultRef.current = result;
@@ -139,10 +135,6 @@ export default function App() {
   useEffect(() => {
     currentPageRef.current = currentPage;
   }, [currentPage]);
-
-  useEffect(() => {
-    appearanceRef.current = getAppearance(settings);
-  }, [settings]);
 
   const showToast = useCallback((message, kind = 'info') => {
     setToast({ message, kind });
@@ -158,13 +150,11 @@ export default function App() {
 
   useEffect(() => {
     if (!sourceData) {
-      setAppliedSettings(settings);
       appliedLayoutRef.current = layoutKey;
       return undefined;
     }
 
-    // Colors, paper tint and folio visibility don't change geometry. Update the
-    // page's appearance without paying for a full measuring pass.
+    // Appearance changes do not affect the page structure.
     if (layoutKey === appliedLayoutRef.current) {
       setResult((current) => (current
         ? { ...current, settings: { ...current.settings, ...getAppearance(settings) } }
@@ -175,13 +165,25 @@ export default function App() {
     setSettingsPending(true);
     const timer = setTimeout(() => {
       appliedLayoutRef.current = layoutKey;
-      setAppliedSettings(settings);
-      setMeasureToken((token) => token + 1);
-      setMeasuring(true);
+      if (book) {
+        const next = paginateBook(book, settings);
+        const oldResult = resultRef.current;
+        const oldPage = oldResult?.pages?.[currentPageRef.current];
+        let target = Math.min(currentPageRef.current, Math.max(0, next.pageCount - 1));
+        if (oldPage?.type === 'song') {
+          const oldSong = oldResult.songbook?.songs?.[oldPage.songIndex];
+          const newIndex = oldSong?.id != null
+            ? next.songbook.songs.findIndex((song) => song.id === oldSong.id)
+            : -1;
+          target = Math.max(0, (next.firstPages[newIndex >= 0 ? newIndex : oldPage.songIndex] ?? 1) - 1);
+        }
+        setResult(next);
+        setCurrentPage(target);
+      }
       setSettingsPending(false);
     }, 160);
     return () => clearTimeout(timer);
-  }, [settings, layoutKey, sourceData]);
+  }, [settings, layoutKey, sourceData, book]);
 
   useEffect(() => {
     const handler = (event) => {
@@ -192,55 +194,17 @@ export default function App() {
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  const book = useMemo(
-    () => (sourceData ? buildBookModel(sourceData, settings.songOrder) : null),
-    [sourceData, settings.songOrder],
-  );
-  const geometry = useMemo(() => getGeometry(appliedSettings), [appliedSettings]);
-
   const openData = useCallback((data, { cached = false } = {}) => {
     setSourceData(data);
-    setResult(null);
+    setResult(paginateBook(buildBookModel(data, settings.songOrder), settings));
     setCurrentPage(0);
     setImportError(null);
-    setAppliedSettings(settings);
     appliedLayoutRef.current = layoutKey;
-    setMeasureToken((token) => token + 1);
     setSettingsPending(false);
-    setMeasuring(true);
     setRecent(addRecent(data));
     if (!data.demo) cacheSongbook(data);
     if (cached) showToast('Opened the saved copy of this songbook.');
   }, [settings, layoutKey, showToast]);
-
-  const handleMeasured = useCallback((next, error) => {
-    if (error || !next) {
-      setMeasuring(false);
-      showToast('The pages could not be measured. Try a different paper size.', 'error');
-      return;
-    }
-    const oldResult = resultRef.current;
-    const oldPage = oldResult?.pages?.[currentPageRef.current];
-    let target = Math.min(currentPageRef.current, Math.max(0, next.pageCount - 1));
-    if (oldPage?.type === 'song') {
-      const oldSong = oldResult.songbook?.songs?.[oldPage.songIndex];
-      const newIndex = oldSong?.id != null
-        ? next.songbook.songs.findIndex((song) => song.id === oldSong.id)
-        : -1;
-      target = Math.max(0, (next.firstPages[newIndex >= 0 ? newIndex : oldPage.songIndex] ?? 1) - 1);
-    }
-    setResult({ ...next, settings: { ...next.settings, ...appearanceRef.current } });
-    setCurrentPage(target);
-    setMeasuring(false);
-    const overflowing = (next.fits ?? []).filter((fit) => fit.overflow).length;
-    if (overflowing > 0) {
-      showToast(
-        `${overflowing} ${overflowing === 1 ? 'song is' : 'songs are'} too long for one page, even after shrinking. `
-        + 'The preview marks them so you can shorten or split the song.',
-        'error',
-      );
-    }
-  }, [showToast]);
 
   const importFromApi = useCallback(async (url) => {
     const response = await fetch('/api/import', {
@@ -320,9 +284,9 @@ export default function App() {
   }, [handleDemo, importFromApi, openData]);
 
   const handlePrint = useCallback(() => {
-    if (!result || measuring || settingsPending) return;
+    if (!result || settingsPending) return;
     setPrintMode(true);
-  }, [result, measuring, settingsPending]);
+  }, [result, settingsPending]);
 
   useEffect(() => {
     if (!printMode) return undefined;
@@ -394,7 +358,6 @@ export default function App() {
     setResult(null);
     setCurrentPage(0);
     setImportError(null);
-    setMeasuring(false);
     setSettingsPending(false);
     setDrawerOpen(false);
     setMobileSettingsOpen(false);
@@ -460,19 +423,9 @@ export default function App() {
           onOpenContents={() => setDrawerOpen(true)}
           onOpenSettings={() => setMobileSettingsOpen(true)}
           onPrint={handlePrint}
-          measuring={measuring || settingsPending}
+          reflowing={settingsPending}
         />
       </div>
-
-      {book && measuring && (
-        <MeasurementLayer
-          book={book}
-          settings={appliedSettings}
-          geometry={geometry}
-          onMeasured={handleMeasured}
-          key={measureToken}
-        />
-      )}
 
       <SongDrawer
         open={drawerOpen}

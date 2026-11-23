@@ -1,10 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSongModel } from '../src/lib/song.js';
-import { __test } from '../src/lib/paginate.js';
-import { getColumnCount, getGeometry, getTypeScale } from '../src/lib/settings.js';
-
-const { fitBlock, packColumns } = __test;
+import { buildBookModel, buildSongModel } from '../src/lib/song.js';
+import { paginateBook } from '../src/lib/paginate.js';
+import { DEFAULT_SETTINGS, getColumnCount, getGeometry, getTypeScale } from '../src/lib/settings.js';
 
 function songWith(tokens, title = '1.') {
   return {
@@ -28,6 +26,23 @@ test('named sections keep chords above the text they belong to', () => {
   assert.deepEqual(
     line.segments.map((segment) => [segment.chords, segment.text]),
     [[['Am'], 'Hello world'], [['G'], 'again']],
+  );
+});
+
+test('preserves lyric spacing at chord boundaries, including cached empty text tokens', () => {
+  const model = buildSongModel(songWith([
+    { type: 0, content: 'Podívejte' },
+    { type: 0, content: ' ' },
+    { type: 1, content: 'A7' },
+    { type: 0, content: 'se na ně' },
+    { type: 0 },
+    { type: 1, content: 'G' },
+    { type: 6 },
+  ]));
+
+  assert.deepEqual(
+    model.sections[0].lines[0].segments.map(({ text, chords }) => [text, chords]),
+    [['Podívejte ', []], ['se na ně ', ['A7']], ['', ['G']]],
   );
 });
 
@@ -103,38 +118,55 @@ test('column count follows orientation unless overridden', () => {
   assert.ok(getTypeScale(landscape, 2) > 1);
 });
 
-test('packing follows the browser column wrap and counts overflow columns', () => {
-  assert.equal(packColumns([100, 100, 100], 150).columns, 3);
-  assert.equal(packColumns([100, 40, 40], 150).columns, 2);
-  assert.equal(packColumns([200], 150).tooTall, true);
-});
+test('books default to title order while preserving original song numbers', () => {
+  const book = buildBookModel({
+    name: 'Test',
+    songs: [
+      { id: 1, name: 'Zebra', sections: [] },
+      { id: 2, name: 'Álpha', sections: [] },
+      { id: 3, name: 'Beta', sections: [] },
+    ],
+  });
 
-test('long songs are shrunk to fit a single page', () => {
-  const fit = fitBlock(
-    { headerHeight: 25, sections: [{ height: 380 }, { height: 380 }, { height: 380 }] },
-    { autoFit: false, autoFitStrength: 45, autoFitFill: 92 },
-    500,
-    2,
+  assert.deepEqual(
+    book.songs.map(({ name, bookNumber }) => [name, bookNumber]),
+    [['Álpha', 2], ['Beta', 3], ['Zebra', 1]],
   );
-  assert.ok(fit.scale < 1);
-  assert.equal(fit.shrunk, true);
-  assert.equal(fit.overflow, false);
-});
-
-test('impossible songs are flagged instead of pretending to fit', () => {
-  const fit = fitBlock(
-    { headerHeight: 25, sections: [{ height: 9000 }] },
-    { autoFit: true, autoFitStrength: 45, autoFitFill: 92 },
-    500,
-    2,
+  const toc = paginateBook(book, DEFAULT_SETTINGS).pages.find((page) => page.type === 'contents');
+  assert.deepEqual(
+    toc.entries.map(({ name, number }) => [name, number]),
+    [['Álpha', 2], ['Beta', 3], ['Zebra', 1]],
   );
-  assert.equal(fit.overflow, true);
 });
 
-test('short songs grow when auto-fit is on', () => {
-  const base = { headerHeight: 25, sections: [{ height: 100 }, { height: 100 }] };
-  const off = fitBlock(base, { autoFit: false, autoFitStrength: 45, autoFitFill: 92 }, 500, 2);
-  const on = fitBlock(base, { autoFit: true, autoFitStrength: 45, autoFitFill: 92 }, 500, 2);
-  assert.ok(on.scale > off.scale);
-  assert.equal(on.autoFitted, true);
+test('contents paginate 48 rows per column on the default page size', () => {
+  const book = {
+    songs: Array.from({ length: 145 }, (_, index) => ({
+      name: `Song ${index + 1}`,
+      bookNumber: index + 1,
+    })),
+  };
+  const result = paginateBook(book, DEFAULT_SETTINGS);
+  const contents = result.pages.filter((page) => page.type === 'contents');
+
+  assert.equal(contents.length, 2);
+  assert.equal(contents[0].rows, 48);
+  assert.equal(contents[0].entries.length, 144);
+  assert.equal(contents[1].entries.length, 1);
+});
+
+test('pagination assigns one fixed page to each song with correct front-matter numbering', () => {
+  const book = {
+    name: 'Test book',
+    songs: [
+      { id: 1, name: 'First song' },
+      { id: 2, name: 'Second song' },
+    ],
+  };
+  const result = paginateBook(book, DEFAULT_SETTINGS);
+
+  assert.deepEqual(result.pages.map((page) => page.type), ['cover', 'contents', 'song', 'song']);
+  assert.deepEqual(result.firstPages, [3, 4]);
+  assert.equal(result.pages[2].fit, undefined);
+  assert.equal(result.pages[3].fit, undefined);
 });

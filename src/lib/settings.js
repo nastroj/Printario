@@ -30,9 +30,10 @@ export const FONT_STACKS = {
 export const KYTARIO_PALETTE = {
   heading: '#111827',
   lyrics: '#1f2937',
-  chords: '#193cb8',
-  rule: '#99a1af',
-  badge: '#1e2939',
+  chords: '#1e40af',
+  rule: '#9ca3af',
+  chorus: '#2563eb',
+  badge: '#1f2937',
   paper: '#ffffff',
 };
 
@@ -80,13 +81,9 @@ export const DEFAULT_SETTINGS = {
   paperTint: KYTARIO_PALETTE.paper,
   cover: true,
   contents: true,
-  pageNumbers: true,
   showMetadata: true,
   showSectionLabels: true,
-  autoFit: true,
-  autoFitStrength: 45,
-  autoFitFill: 92,
-  songOrder: 'original',
+  songOrder: 'title',
 };
 
 /**
@@ -126,10 +123,18 @@ export function loadSettings() {
       ...saved,
       margins: { ...DEFAULT_SETTINGS.margins, ...(saved?.margins ?? {}) },
     };
+    delete merged.autoFit;
+    delete merged.autoFitStrength;
+    delete merged.autoFitFill;
+    delete merged.pageNumbers;
     if (!PAPER_SIZES[merged.paper]) merged.paper = DEFAULT_SETTINGS.paper;
     if (!['portrait', 'landscape'].includes(merged.orientation)) merged.orientation = 'landscape';
     if (!['auto', 'one', 'two'].includes(merged.columns)) merged.columns = 'auto';
     if (!FONT_STACKS[merged.fontFamily]) merged.fontFamily = 'inter';
+    if (merged.songOrder === 'original') merged.songOrder = 'title';
+    if (!['manual', 'title', 'author'].includes(merged.songOrder)) {
+      merged.songOrder = DEFAULT_SETTINGS.songOrder;
+    }
     return merged;
   } catch {
     return { ...DEFAULT_SETTINGS, margins: { ...DEFAULT_MARGINS } };

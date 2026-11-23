@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search, X, Sparkles, Printer, ArrowRight } from 'lucide-react';
+import { Search, X, Printer, ArrowRight } from 'lucide-react';
 
 export function SongDrawer({ open, onClose, result, currentPage, onSelect, onPrint }) {
   const [query, setQuery] = useState('');
@@ -22,8 +22,7 @@ export function SongDrawer({ open, onClose, result, currentPage, onSelect, onPri
     const q = query.trim().toLocaleLowerCase();
     return result.songbook.songs.map((song, index) => {
       const firstPage = result.firstPages[index] ?? 1;
-      const fit = result.fits[index];
-      return { song, index, firstPage, fit };
+      return { song, index, firstPage };
     }).filter(({ song }) => {
       if (!q) return true;
       return `${song.name} ${song.author ?? ''} ${song.interpreter ?? ''}`.toLocaleLowerCase().includes(q);
@@ -57,7 +56,7 @@ export function SongDrawer({ open, onClose, result, currentPage, onSelect, onPri
         </div>
         <div className="drawer-list">
           {entries.length === 0 && <p className="drawer-empty">No songs match “{query}”.</p>}
-          {entries.map(({ song, index, firstPage, fit }) => {
+          {entries.map(({ song, index, firstPage }) => {
             const active = currentPage === firstPage - 1;
             return (
               <button
@@ -69,7 +68,7 @@ export function SongDrawer({ open, onClose, result, currentPage, onSelect, onPri
                 }}
                 key={song.id ?? index}
               >
-                <span className="drawer-number">{String(index + 1).padStart(2, '0')}</span>
+                <span className="drawer-number">{String(song.bookNumber ?? index + 1).padStart(2, '0')}</span>
                 <span className="drawer-song">
                   <span className="drawer-song-name">{song.name}</span>
                   <span className="drawer-song-meta">
@@ -77,9 +76,6 @@ export function SongDrawer({ open, onClose, result, currentPage, onSelect, onPri
                     {song.tonalKey ? ` · ${song.tonalKey}` : ''}
                   </span>
                 </span>
-                {fit?.autoFitted && (
-                  <span className="drawer-fit"><Sparkles size={10} /> {fit.scale.toFixed(2)}×</span>
-                )}
                 <span className="drawer-page">{firstPage}</span>
                 <ArrowRight size={13} className="drawer-arrow" />
               </button>

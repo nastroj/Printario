@@ -1,3 +1,5 @@
+import { sortSongs } from './settings.js';
+
 /**
  * Convert Kytario's compact section/token format into the line model used by
  * the print renderer.
@@ -36,6 +38,7 @@ function toContent(token) {
   const value = token?.content;
   if (typeof value === 'string') return value;
   if (typeof value === 'number') return String(value);
+  if (toType(token) === TOKEN.TEXT) return ' ';
   return '';
 }
 
@@ -231,18 +234,12 @@ export function songMetaParts(song) {
   return parts;
 }
 
-export function buildBookModel(songbook, order = 'original') {
-  const songs = [...(songbook.songs ?? [])];
-  if (order === 'title') {
-    songs.sort((a, b) => a.name.localeCompare(b.name, 'cs', { sensitivity: 'base' }));
-  } else if (order === 'author') {
-    songs.sort((a, b) => {
-      const aa = displayAuthor(a) || 'zzz';
-      const bb = displayAuthor(b) || 'zzz';
-      return aa.localeCompare(bb, 'cs', { sensitivity: 'base' }) || a.name.localeCompare(b.name, 'cs');
-    });
-  }
-  return { ...songbook, songs: songs.map(buildSongModel) };
+export function buildBookModel(songbook, order = 'title') {
+  const songs = (songbook.songs ?? []).map((song, index) => ({
+    ...song,
+    bookNumber: index + 1,
+  }));
+  return { ...songbook, songs: sortSongs(songs, order).map(buildSongModel) };
 }
 
 /** Exported for unit tests. */

@@ -1,7 +1,6 @@
 /**
- * A lightweight client smoke test. It uses jsdom plus synthetic layout
- * measurements so the whole studio (import -> measure -> preview -> print)
- * runs end-to-end in CI without a real browser.
+ * A lightweight client smoke test that runs the studio flow in jsdom without
+ * requiring a real browser.
  */
 import { JSDOM } from 'jsdom';
 import { createServer } from 'vite';
@@ -35,15 +34,6 @@ window.ResizeObserver = class {
   disconnect() {}
 };
 globalThis.ResizeObserver = window.ResizeObserver;
-
-window.HTMLElement.prototype.getBoundingClientRect = function () {
-  let height = 100;
-  if (this.matches('[data-line]')) height = 22;
-  else if (this.matches('[data-section]')) height = 110 + this.querySelectorAll('[data-line]').length * 22;
-  else if (this.matches('[data-song-header]')) height = 105;
-  else if (this.matches('.section-heading')) height = 18;
-  return { width: 680, height, top: 0, left: 0, right: 680, bottom: height, x: 0, y: 0, toJSON() {} };
-};
 
 const calls = [];
 window.print = () => calls.push('print');
@@ -101,13 +91,16 @@ try {
   await waitFor('.song-drawer');
   const rows = document.querySelectorAll('.drawer-row');
   if (rows.length !== 3) throw new Error(`Expected 3 contents rows, got ${rows.length}`);
+  if (!rows[0].textContent.includes('02') || !rows[0].textContent.includes('Lantern Song')) {
+    throw new Error('Contents should use title order and retain original song numbers');
+  }
   rows[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 100));
 
   const title = document.querySelector('.song-title')?.textContent;
-  const fitChip = document.querySelector('.fit-chip')?.textContent?.trim();
   if (!title) throw new Error('Preview did not render a song title');
-  if (!fitChip) throw new Error('Auto-fit chip missing');
+  if (document.querySelector('.fit-chip')) throw new Error('Fit status should not be rendered');
+  if (document.querySelector('.stage-caption, .page-footer')) throw new Error('Page caption and footer should not be rendered');
 
   // Jump to the second song from the contents drawer.
   document.querySelector('.toolbar-button')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
@@ -117,7 +110,7 @@ try {
   const activeTitle = document.querySelector('.song-title')?.textContent;
   if (!activeTitle || activeTitle === title) throw new Error('Song navigation did not change the page');
 
-  // Change paper size and let the measurement pass run again.
+  // Change paper size and verify the fixed layout is regenerated.
   const paperButtons = [...document.querySelectorAll('.segment')];
   const a5 = paperButtons.find((button) => button.textContent.trim() === 'A5');
   if (!a5) throw new Error('A5 paper option missing');
@@ -154,7 +147,6 @@ try {
 
   console.log(JSON.stringify({
     title,
-    fitChip,
     navText,
     activeTitle,
     printedPages,

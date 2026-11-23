@@ -44,6 +44,13 @@ function cleanText(value, max = 1_000) {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+function cleanTokenText(value, max = 2_000) {
+  if (typeof value !== 'string') return null;
+  const text = value.replace(/[\u0000-\u001f\u007f]/g, '');
+  if (!text) return null;
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
 function asInt(value, fallback = null) {
   const n = Number(value);
   return Number.isFinite(n) ? Math.round(n) : fallback;
@@ -399,7 +406,9 @@ function normaliseToken(token) {
   if (type < 0 || type > 8) return null;
   const content = type === 4 || type === 5 || type === 3
     ? asInt(token.content, type === 3 ? 1 : 2)
-    : cleanText(token.content, 2_000);
+    : type === 0
+      ? cleanTokenText(token.content)
+      : cleanText(token.content, 2_000);
   return {
     type,
     ...(content !== null ? { content } : {}),
@@ -429,7 +438,7 @@ export function normaliseSong(song) {
   return {
     id: asInt(song.id, null),
     name: cleanText(song.name, 200) ?? 'Untitled song',
-    author: cleanText(song.author, 200),
+    author: cleanText(song.author, 200) ?? cleanText(song.authorLabel, 200),
     interpreter: cleanText(song.interpreter, 200),
     capo: Math.max(0, Math.min(12, asInt(song.capo, 0) ?? 0)),
     tonalKey: cleanText(song.tonalKey, 20),

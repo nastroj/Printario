@@ -88,6 +88,31 @@ test('normalises Kytario songs and sections safely', () => {
   assert.equal(song.sections.length, 1);
   assert.equal(song.sections[0].title, '1.');
   assert.equal(song.sections[0].tokens.length, 3);
+
+  const labeledSong = normaliseSong({
+    name: 'Labeled song',
+    authorLabel: 'Nirvana',
+    sections: [{ title: '1.', tokens: [{ type: 0, content: 'Lyrics' }] }],
+  });
+  assert.equal(labeledSong.author, 'Nirvana');
+});
+
+test('preserves whitespace-only lyric tokens during import', () => {
+  const song = normaliseSong({
+    name: 'Spacing',
+    sections: [{
+      title: '1.',
+      tokens: [
+        { type: 0, content: 'word' },
+        { type: 0, content: ' ' },
+        { type: 1, content: 'C' },
+        { type: 0, content: 'next' },
+        { type: 6 },
+      ],
+    }],
+  });
+
+  assert.equal(song.sections[0].tokens[1].content, ' ');
 });
 
 test('demo songbook has three printable songs', () => {

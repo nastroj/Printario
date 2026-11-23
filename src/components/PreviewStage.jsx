@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Minus, Plus,
-  ListMusic, Printer, Settings2, Sparkles, Loader2, TriangleAlert,
+  ListMusic, Printer, Settings2, Loader2,
 } from 'lucide-react';
 import { PaperPage } from './PaperPage.jsx';
 
@@ -45,40 +45,6 @@ function PageNavigator({ currentPage, pageCount, onChange }) {
   );
 }
 
-function FitChip({ fit }) {
-  if (!fit) return null;
-  if (fit.overflow) {
-    return (
-      <span className="fit-chip is-overflow" title="This song is still longer than one page, even at the smallest comfortable size. Lines past the page edge are clipped.">
-        <TriangleAlert size={12} />
-        Too long — clipped
-      </span>
-    );
-  }
-  if (fit.shrunk) {
-    return (
-      <span className="fit-chip is-shrunk" title="The type was reduced so the whole song fits on one page.">
-        <Sparkles size={12} />
-        Shrunk to {Math.round(fit.scale * 100)}%
-      </span>
-    );
-  }
-  if (fit.autoFitted) {
-    return (
-      <span className="fit-chip is-fitted" title="Automatic type size for this song">
-        <Sparkles size={12} />
-        Auto-fit {fit.scale.toFixed(2)}×
-      </span>
-    );
-  }
-  return (
-    <span className="fit-chip" title="The song fits on one page at its natural size">
-      <Sparkles size={12} />
-      One page
-    </span>
-  );
-}
-
 export function PreviewStage({
   result,
   settings,
@@ -87,7 +53,7 @@ export function PreviewStage({
   onOpenContents,
   onOpenSettings,
   onPrint,
-  measuring,
+  reflowing,
   mobile,
 }) {
   const stageRef = useRef(null);
@@ -97,37 +63,61 @@ export function PreviewStage({
   useLayoutEffect(() => {
     const el = stageRef.current;
     if (!el) return undefined;
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      setStageSize({ width: entry.contentRect.width, height: entry.contentRect.height });
-    });
-    observer.observe(el);
-    setStageSize({ width: el.clientWidth, height: el.clientHeight });
+    const updateSize = (entry) => {
+      const observedBox = entry?.borderBoxSize;
+      const borderBox = Array.isArray(observedBox) ? observedBox[0] : observedBox;
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      const px = (value) => Number.parseFloat(value) || 0;
+      const horizontalInsets = px(style.paddingLeft) + px(style.paddingRight)
+        + px(style.borderLeftWidth) + px(style.borderRightWidth);
+      const verticalInsets = px(style.paddingTop) + px(style.paddingBottom)
+        + px(style.borderTopWidth) + px(style.borderBottomWidth);
+      const hasBorderBox = borderBox?.inlineSize != null && borderBox?.blockSize != null;
+      const hasRect = rect.width > 0 || rect.height > 0;
+      const width = hasBorderBox
+        ? borderBox.inlineSize - horizontalInsets
+        : hasRect
+          ? rect.width - horizontalInsets
+          : entry?.contentRect?.width ?? el.clientWidth;
+      const height = hasBorderBox
+        ? borderBox.blockSize - verticalInsets
+        : hasRect
+          ? rect.height - verticalInsets
+          : entry?.contentRect?.height ?? el.clientHeight;
+      const next = {
+        width: Math.max(0, width),
+        height: Math.max(0, height),
+      };
+      setStageSize((current) => (
+        current.width === next.width && current.height === next.height ? current : next
+      ));
+    };
+    const observer = new ResizeObserver(([entry]) => updateSize(entry));
+    observer.observe(el, { box: 'border-box' });
+    updateSize();
     return () => observer.disconnect();
   }, []);
 
   const page = result?.pages?.[currentPage];
   const geometry = result?.geometry;
   const appliedSettings = result?.settings ?? settings;
-  const fitScale = geometry
+  const pageScale = geometry
     ? Math.min(
-      Math.max(0.2, (stageSize.width - 64) / geometry.widthPx),
-      Math.max(0.2, (stageSize.height - 56) / geometry.heightPx),
+      Math.max(0.2, stageSize.width / geometry.widthPx),
+      Math.max(0.2, stageSize.height / geometry.heightPx),
       1,
     )
     : 0.7;
-  const scale = fitScale * zoom;
+  const scale = pageScale * zoom;
   const pageWidth = geometry ? geometry.widthPx * scale : 500;
   const pageHeight = geometry ? geometry.heightPx * scale : 700;
-  const activeSongFit = page?.type === 'song' ? page.fit : null;
 
   return (
     <section className="preview-pane">
       <div className="preview-toolbar">
         <div className="preview-toolbar-left">
           {result && <PageNavigator currentPage={currentPage} pageCount={result.pageCount} onChange={onPageChange} />}
-          <FitChip fit={activeSongFit} />
         </div>
         <div className="preview-toolbar-right">
           <button type="button" className="toolbar-button" onClick={onOpenContents}>
@@ -158,8 +148,8 @@ export function PreviewStage({
         {!result && (
           <div className="stage-loading">
             <div className="loading-orbit"><Loader2 size={26} className="spin" /></div>
-            <strong>Setting the type…</strong>
-            <p>Measuring songs and finding their comfy size.</p>
+            <strong>Preparing the preview…</strong>
+            <p>Building the song pages.</p>
           </div>
         )}
         {result && page && (
@@ -182,16 +172,10 @@ export function PreviewStage({
             <div className="paper-shadow" aria-hidden="true" />
           </div>
         )}
-        {measuring && result && (
+        {reflowing && result && (
           <div className="reflow-overlay">
             <Loader2 size={17} className="spin" />
             <span>Reflowing pages…</span>
-          </div>
-        )}
-        {result && (
-          <div className="stage-caption">
-            <span>{page?.type === 'cover' ? 'Cover' : page?.type === 'contents' ? 'Contents' : page?.song?.name}</span>
-            <span>{settings.paper} · {settings.orientation} · {result?.columns ?? 2} col</span>
           </div>
         )}
       </div>

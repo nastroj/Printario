@@ -57,9 +57,8 @@ export function ImportScreen({
             <span className="landing-title-accent">ready for paper.</span>
           </h1>
           <p className="landing-lede">
-            Paste a Kytario songbook link. Printario imports every song, gives you
-            complete control over the page — and gently scales short songs to fill
-            it beautifully.
+            Paste a Kytario songbook link. Printario imports every song and keeps
+            chords, lyrics and section spacing true to the original print layout.
           </p>
 
           <form className={`url-form${focused ? ' is-focused' : ''}`} onSubmit={submit}>
@@ -152,10 +151,6 @@ export function ImportScreen({
               </div>
               <div className="mock-cover-bottom"><span>Made with Printario</span><span>kytario.com</span></div>
             </div>
-            <div className="floating-chip chip-fit">
-              <span className="chip-icon"><WandSparkles size={14} /></span>
-              <span><strong>Auto-fit</strong><small>fills the page, gently</small></span>
-            </div>
             <div className="floating-chip chip-format">
               <span className="chip-icon"><FileText size={14} /></span>
               <span><strong>A4 · Landscape</strong><small>2 columns · 1 song / page</small></span>
@@ -171,7 +166,7 @@ export function ImportScreen({
         </div>
         <div className="feature">
           <span className="feature-icon"><WandSparkles size={19} /></span>
-          <div><strong>Auto-fit that reads well</strong><p>Short songs grow. Long songs shrink just enough to stay on one page.</p></div>
+          <div><strong>Faithful song typography</strong><p>Inter, chord placement and section spacing modeled on Kytario.</p></div>
         </div>
         <div className="feature">
           <span className="feature-icon"><Printer size={19} /></span>

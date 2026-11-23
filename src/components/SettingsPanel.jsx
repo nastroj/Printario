@@ -1,6 +1,6 @@
 import {
   ArrowUpRight, BookOpen, Check, FileText, LayoutList, ListMusic, Palette,
-  Printer, RotateCcw, Type, WandSparkles, X,
+  Printer, RotateCcw, Type, X,
 } from 'lucide-react';
 import {
   COLOR_PRESETS, FONT_STACKS, MARGIN_PRESETS, PAPER_SIZES, PAPER_TINTS,
@@ -45,7 +45,6 @@ export function SettingsPanel({
   const layoutGeometry = getGeometry(settings);
   const columns = getColumnCount(settings, layoutGeometry);
   const typeScale = getTypeScale(layoutGeometry, columns);
-  const maxScale = (1 + settings.autoFitStrength / 100).toFixed(2);
   const effective = (value) => `${(value * typeScale).toFixed(1)} px`;
 
   return (
@@ -137,14 +136,6 @@ export function SettingsPanel({
             ))}
           </div>
 
-          <div className="toggle-stack">
-            <Toggle
-              label="Page numbers"
-              hint="Small, quiet folios at the foot of the page."
-              checked={settings.pageNumbers}
-              onChange={(value) => update('pageNumbers', value)}
-            />
-          </div>
         </PanelSection>
 
         <PanelSection icon={Type} title="Typography">
@@ -214,45 +205,11 @@ export function SettingsPanel({
           </div>
         </PanelSection>
 
-        <PanelSection icon={WandSparkles} title="Auto-fit">
-          <Toggle
-            label="Let short songs fill the page"
-            hint="Bigger notes, more air between lines and sections."
-            checked={settings.autoFit}
-            onChange={(value) => update('autoFit', value)}
-          />
-          <div className={`autofit-body${settings.autoFit ? '' : ' is-disabled'}`}>
-            <RangeControl
-              label="Growth limit"
-              value={settings.autoFitStrength}
-              min={0}
-              max={80}
-              unit="%"
-              onChange={(v) => update('autoFitStrength', v)}
-            />
-            <RangeControl
-              label="Comfortable fill"
-              value={settings.autoFitFill}
-              min={65}
-              max={96}
-              unit="%"
-              onChange={(v) => update('autoFitFill', v)}
-            />
-            <div className="autofit-info">
-              <span className="autofit-info-icon"><WandSparkles size={14} /></span>
-              <p>
-                Up to <strong>{maxScale}×</strong> larger on a short song.
-                Long songs are shrunk just enough to stay on one page.
-              </p>
-            </div>
-          </div>
-        </PanelSection>
-
         <PanelSection icon={LayoutList} title="Book extras">
           <div className="toggle-stack">
-            <Toggle label="Cover page" hint="A title page with the book name and description." checked={settings.cover} onChange={(v) => update('cover', v)} />
-            <Toggle label="Table of contents" hint="Page numbers are filled in automatically." checked={settings.contents} onChange={(v) => update('contents', v)} />
-            <Toggle label="Song details" hint="Interpreter and capo beside the title." checked={settings.showMetadata} onChange={(v) => update('showMetadata', v)} />
+            <Toggle label="Cover page" hint="A title page with the book name and songbook link." checked={settings.cover} onChange={(v) => update('cover', v)} />
+            <Toggle label="Table of contents" hint="A three-column song list before the songs." checked={settings.contents} onChange={(v) => update('contents', v)} />
+            <Toggle label="Song details" hint="Song key beside the title." checked={settings.showMetadata} onChange={(v) => update('showMetadata', v)} />
             <Toggle label="Section labels" hint="Verse and chorus names in the left gutter." checked={settings.showSectionLabels} onChange={(v) => update('showSectionLabels', v)} />
           </div>
           <SelectControl
@@ -260,7 +217,7 @@ export function SettingsPanel({
             value={settings.songOrder}
             onChange={(v) => update('songOrder', v)}
             options={[
-              { value: 'original', label: 'Songbook order' },
+              { value: 'manual', label: 'Songbook order' },
               { value: 'title', label: 'Title A → Z' },
               { value: 'author', label: 'Author A → Z' },
             ]}
