@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Minus, Plus,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Minus, Plus,
   ListMusic, Printer, Settings2, Loader2,
 } from 'lucide-react';
 import { PaperPage } from './PaperPage.jsx';
@@ -54,6 +54,8 @@ export function PreviewStage({
   onToggleSettings,
   settingsOpen,
   onPrint,
+  onDownloadPdf,
+  pdfGenerating,
   reflowing,
 }) {
   const stageRef = useRef(null);
@@ -183,9 +185,18 @@ export function PreviewStage({
           </div>
           <button
             type="button"
+            className="toolbar-button header-pdf"
+            onClick={onDownloadPdf}
+            disabled={!result || reflowing || pdfGenerating}
+            title="Download PDF directly"
+          >
+            <Download size={16} /> <span>PDF</span>
+          </button>
+          <button
+            type="button"
             className="primary-button header-print"
             onClick={onPrint}
-            disabled={!result || reflowing}
+            disabled={!result || reflowing || pdfGenerating}
           >
             <Printer size={16} /> <span>Print</span>
           </button>

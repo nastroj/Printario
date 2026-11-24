@@ -1,5 +1,5 @@
 import {
-  ArrowUpRight, BookOpen, Check, FileText, LayoutList, ListMusic,
+  ArrowUpRight, BookOpen, Check, Download, FileText, LayoutList, ListMusic,
   Palette, Printer, RotateCcw, Type, X,
 } from 'lucide-react';
 import {
@@ -39,7 +39,7 @@ function SongbookCard({ book, onResetBook, onOpenContents }) {
 
 export function SettingsPanel({
   book, settings, update, setMargin, onReset, onResetBook, onOpenContents, onPrint,
-  onClose,
+  onDownloadPdf, pdfGenerating, onClose,
 }) {
   const geometry = PAPER_SIZES[settings.paper];
   const layoutGeometry = getGeometry(settings);
@@ -337,8 +337,21 @@ export function SettingsPanel({
           <span className="panel-version">Printario · v1.0</span>
         </div>
       </div>
-      <div className="settings-sheet-foot">
-        <button type="button" className="primary-button wide-button" onClick={onPrint}>
+      <div className="settings-sheet-foot settings-foot-actions">
+        <button
+          type="button"
+          className="soft-button wide-button"
+          onClick={onDownloadPdf}
+          disabled={pdfGenerating}
+        >
+          <Download size={16} /> Download PDF
+        </button>
+        <button
+          type="button"
+          className="primary-button wide-button"
+          onClick={onPrint}
+          disabled={pdfGenerating}
+        >
           <Printer size={16} /> Print
         </button>
       </div>

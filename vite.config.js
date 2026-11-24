@@ -9,5 +9,18 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/jspdf')) {
+            return 'vendor-jspdf';
+          }
+          if (id.includes('node_modules/html2canvas')) {
+            return 'vendor-html2canvas';
+          }
+        },
+      },
+    },
   },
 });

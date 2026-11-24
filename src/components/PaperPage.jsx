@@ -40,6 +40,10 @@ function CoverPage({ book, columns }) {
                 src={qrUrl}
                 alt={`QR code for songbook ${book.name}`}
                 decoding="sync"
+                crossOrigin="anonymous"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
               />
             </a>
             <a className="cover-source-link" href={sourceUrl} target="_blank" rel="noreferrer">

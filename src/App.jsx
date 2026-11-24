@@ -6,6 +6,7 @@ import { ImportScreen } from './components/ImportScreen.jsx';
 import { PreviewStage } from './components/PreviewStage.jsx';
 import { SettingsPanel } from './components/SettingsPanel.jsx';
 import { SongDrawer } from './components/SongDrawer.jsx';
+import { PdfProgressDialog } from './components/PdfProgressDialog.jsx';
 import { Brand } from './components/Brand.jsx';
 import { PaperPage } from './components/PaperPage.jsx';
 import { buildBookModel } from './lib/song.js';
@@ -115,6 +116,8 @@ export default function App() {
   const [printMode, setPrintMode] = useState(false);
   const [toast, setToast] = useState(null);
   const [installPrompt, setInstallPrompt] = useState(null);
+  const [pdfProgress, setPdfProgress] = useState(null);
+  const pdfAbortRef = useRef(null);
 
   const toastTimer = useRef(null);
   const resultRef = useRef(null);
@@ -268,6 +271,39 @@ export default function App() {
     setPrintMode(true);
   }, [result, settingsPending]);
 
+  const handleDownloadPdf = useCallback(async () => {
+    if (!result || settingsPending || pdfProgress) return;
+    const controller = new AbortController();
+    pdfAbortRef.current = controller;
+    setPdfProgress({ current: 0, total: result.pageCount, pageName: 'Starting…' });
+
+    try {
+      const { exportSongbookPdf } = await import('./lib/pdf.js');
+      const filename = await exportSongbookPdf({
+        result,
+        onProgress: (p) => setPdfProgress(p),
+        signal: controller.signal,
+      });
+      showToast(`Downloaded ${filename}`, 'info');
+    } catch (error) {
+      if (controller.signal.aborted || error?.name === 'AbortError' || error?.message === 'Export cancelled') {
+        showToast('PDF export cancelled.', 'info');
+      } else {
+        console.error('PDF export failed:', error);
+        showToast(error.message || 'Failed to generate PDF.', 'error');
+      }
+    } finally {
+      setPdfProgress(null);
+      pdfAbortRef.current = null;
+    }
+  }, [result, settingsPending, pdfProgress, showToast]);
+
+  const handleCancelDownloadPdf = useCallback(() => {
+    if (pdfAbortRef.current) {
+      pdfAbortRef.current.abort();
+    }
+  }, []);
+
   const handleRemoveRecent = useCallback((item) => {
     if (!item?.token) return;
     setRecent(removeRecent(item.token));
@@ -276,28 +312,60 @@ export default function App() {
   useEffect(() => {
     if (!printMode) return undefined;
     let cancelled = false;
+    let finishTimer = null;
+
     const finish = () => {
-      if (!cancelled) setPrintMode(false);
+      if (cancelled) return;
+      if (finishTimer) {
+        clearTimeout(finishTimer);
+        finishTimer = null;
+      }
+      setPrintMode(false);
     };
-    const timer = setTimeout(async () => {
+
+    const startPrint = async () => {
+      if (cancelled) return;
+      // Bound the font wait: on slow mobile networks web fonts can take many
+      // seconds to download, which delays the print trigger and can error out.
+      // Give the browser a short window for fonts, then print with system
+      // fallback fonts; the line scaler adjusts text metrics after mount.
       try {
-        await document.fonts?.ready;
+        await Promise.race([
+          document.fonts?.ready ?? Promise.resolve(),
+          new Promise((resolve) => setTimeout(resolve, 2500)),
+        ]);
       } catch {
         // no-op
       }
       if (cancelled) return;
-      requestAnimationFrame(() => requestAnimationFrame(() => {
+
+      requestAnimationFrame(() => {
         if (cancelled) return;
-        window.addEventListener('afterprint', finish, { once: true });
-        window.print();
-        setTimeout(finish, 10000);
-      }));
-    }, 90);
+        try {
+          if (typeof window.print !== 'function') {
+            throw new Error('Printing is not supported in this browser.');
+          }
+          window.addEventListener('afterprint', finish, { once: true });
+          finishTimer = setTimeout(finish, 10000);
+          window.print();
+        } catch (error) {
+          showToast(
+            error.message || "Saving the PDF failed. Try the browser's Print → Save as PDF.",
+            'error',
+          );
+          setPrintMode(false);
+        }
+      });
+    };
+
+    const timer = setTimeout(startPrint, 90);
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      clearTimeout(finishTimer);
+      window.removeEventListener('afterprint', finish);
     };
-  }, [printMode]);
+  }, [printMode, showToast]);
 
   useEffect(() => {
     if (!result) return undefined;
@@ -344,6 +412,10 @@ export default function App() {
   }, [showToast]);
 
   const newBook = useCallback(() => {
+    if (pdfAbortRef.current) {
+      pdfAbortRef.current.abort();
+    }
+    setPdfProgress(null);
     setSourceData(null);
     setResult(null);
     setCurrentPage(0);
@@ -407,6 +479,8 @@ export default function App() {
             }}
             settingsOpen={settingsOpen}
             onPrint={handlePrint}
+            onDownloadPdf={handleDownloadPdf}
+            pdfGenerating={Boolean(pdfProgress)}
             reflowing={settingsPending}
           />
         </div>
@@ -453,6 +527,11 @@ export default function App() {
               setSettingsOpen(false);
               handlePrint();
             }}
+            onDownloadPdf={() => {
+              setSettingsOpen(false);
+              handleDownloadPdf();
+            }}
+            pdfGenerating={Boolean(pdfProgress)}
             onClose={() => setSettingsOpen(false)}
           />
         </div>
@@ -460,6 +539,10 @@ export default function App() {
         <Toast toast={toast} onClose={() => setToast(null)} />
       </div>
       {printMode && result && <PrintRoot result={result} settings={result.settings} />}
+      <PdfProgressDialog
+        progress={pdfProgress}
+        onCancel={handleCancelDownloadPdf}
+      />
     </>
   );
 }
