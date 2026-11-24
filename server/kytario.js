@@ -628,6 +628,20 @@ async function importProject(token) {
   return { ...result, sourceUrl: `${KYTARIO_ORIGIN}/${songbookToken}` };
 }
 
+export async function fetchSongbookQrSvg(token) {
+  if (!SONGBOOK_TOKEN_RE.test(token)) {
+    throw new ImportError('That songbook token is invalid.', { code: 'INVALID_TOKEN', status: 400 });
+  }
+  const svg = await fetchText(
+    `${KYTARIO_ORIGIN}/api/songbooks/${encodeURIComponent(token)}/qr?format=svg`,
+    { accept: 'image/svg+xml,text/plain;q=0.5,*/*;q=0.1' },
+  );
+  if (!svg.trim().startsWith('<svg')) {
+    throw new ImportError('QR code unavailable.', { code: 'QR_UNAVAILABLE', status: 502 });
+  }
+  return svg;
+}
+
 export async function importFromKytario(rawInput) {
   const descriptor = parseKytarioUrl(rawInput);
   if (descriptor.kind === 'songbook') return importSongbook(descriptor.token);

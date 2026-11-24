@@ -38,22 +38,94 @@ globalThis.ResizeObserver = window.ResizeObserver;
 const calls = [];
 window.print = () => calls.push('print');
 
-const { demoSongbook } = await import('../server/demo.js');
+const fixtureSongbook = {
+  token: 'fixture-book',
+  name: 'Songs for the Slow Road',
+  description: 'Smoke test songbook fixture.',
+  projectName: 'Printario Studio',
+  sourceUrl: 'https://kytario.com/fixture-book',
+  importedAt: '2026-01-01T00:00:00.000Z',
+  songCount: 3,
+  songs: [
+    {
+      id: 101,
+      name: 'Morning Rail',
+      author: 'Printario Studio',
+      capo: 0,
+      tonalKey: 'D',
+      notation: 'english',
+      sections: [
+        {
+          title: '1.',
+          expandable: false,
+          tokens: [
+            { type: 1, content: 'D' },
+            { type: 0, content: 'Coffee cooling on the ' },
+            { type: 1, content: 'A' },
+            { type: 0, content: 'sill' },
+            { type: 6 },
+          ],
+        },
+      ],
+    },
+    {
+      id: 102,
+      name: 'Lantern Song',
+      author: 'Printario Studio',
+      capo: 0,
+      tonalKey: 'G',
+      notation: 'english',
+      sections: [
+        {
+          title: '1.',
+          expandable: false,
+          tokens: [
+            { type: 1, content: 'G' },
+            { type: 0, content: 'Carry the lantern, ' },
+            { type: 1, content: 'C' },
+            { type: 0, content: 'carry it high' },
+            { type: 6 },
+          ],
+        },
+      ],
+    },
+    {
+      id: 103,
+      name: 'Paper Boat',
+      author: 'Printario Studio',
+      capo: 0,
+      tonalKey: 'C',
+      notation: 'english',
+      sections: [
+        {
+          title: '1.',
+          expandable: false,
+          tokens: [
+            { type: 1, content: 'C' },
+            { type: 0, content: 'Folded from an old ' },
+            { type: 1, content: 'F' },
+            { type: 0, content: 'letter' },
+            { type: 6 },
+          ],
+        },
+      ],
+    },
+  ],
+};
 
-const demoResponse = () => ({
+const fixtureResponse = () => ({
   ok: true,
   status: 200,
-  json: async () => ({ ok: true, data: demoSongbook }),
+  json: async () => ({ ok: true, data: fixtureSongbook }),
 });
-window.fetch = async (url, options) => {
-  if (String(url).includes('/api/demo')) return demoResponse();
-  if (String(url).includes('/api/import')) return demoResponse();
+window.fetch = async (url) => {
+  if (String(url).includes('/api/import')) return fixtureResponse();
   return { ok: false, status: 404, json: async () => ({ ok: false, error: { message: 'Not found' } }) };
 };
 globalThis.fetch = window.fetch;
 
 const vite = await createServer({
-  server: { middlewareMode: true },
+  server: { middlewareMode: true, hmr: false, ws: false },
   appType: 'custom',
   logLevel: 'error',
   optimizeDeps: { noDiscovery: true },
@@ -77,16 +149,22 @@ try {
   };
 
   window.addEventListener('error', (event) => console.error('WINDOW ERROR', event.error));
-  const demoButton = await waitFor('.demo-button');
-  demoButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
   window.addEventListener('unhandledrejection', (event) => console.error('UNHANDLED', event.reason));
+
+  const input = await waitFor('input[aria-label="Kytario songbook link"]');
+  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  valueSetter.call(input, 'https://kytario.com/fixture-book');
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  document.querySelector('.url-form')?.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+
   await waitFor('.paper-page', 8000);
   if (!document.querySelector('.page-cover')) throw new Error('Cover page did not render');
 
   const navText = document.querySelector('.page-number-input')?.textContent?.trim();
   if (!navText || !navText.includes('/')) throw new Error('Page navigation missing');
 
-  // Open contents and jump into the first song.
+  // Open contents and jump into the first song (alphabetical ToC: Lantern Song, original #2).
   document.querySelector('.toolbar-button')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await waitFor('.song-drawer');
   const rows = document.querySelectorAll('.drawer-row');
@@ -110,7 +188,9 @@ try {
   const activeTitle = document.querySelector('.song-title')?.textContent;
   if (!activeTitle || activeTitle === title) throw new Error('Song navigation did not change the page');
 
-  // Change paper size and verify the fixed layout is regenerated.
+  // Open the settings sheet, change paper size to A5, and verify the layout updates.
+  document.querySelector('.settings-toggle-button')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await waitFor('.settings-sheet-layer.is-open');
   const paperButtons = [...document.querySelectorAll('.segment')];
   const a5 = paperButtons.find((button) => button.textContent.trim() === 'A5');
   if (!a5) throw new Error('A5 paper option missing');
@@ -133,14 +213,6 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 400));
   const printedPages = document.querySelectorAll('.print-root .paper-page').length;
   if (!printedPages) {
-    console.error('DEBUG print', {
-      calls,
-      printButton: Boolean(document.querySelector('.header-print')),
-      overlay: document.querySelector('.reflow-overlay')?.textContent,
-      toast: document.querySelector('.toast')?.textContent,
-      pageClass: document.querySelector('.paper-page')?.className,
-      bodyEnd: document.body.innerHTML.slice(-400),
-    });
     throw new Error('Print root did not render pages');
   }
   await new Promise((resolve) => setTimeout(resolve, 250));

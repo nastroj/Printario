@@ -20,10 +20,20 @@ export function SongDrawer({ open, onClose, result, currentPage, onSelect, onPri
   const entries = useMemo(() => {
     if (!result) return [];
     const q = query.trim().toLocaleLowerCase();
-    return result.songbook.songs.map((song, index) => {
-      const firstPage = result.firstPages[index] ?? 1;
-      return { song, index, firstPage };
+    const ordered = result.tocEntries ?? result.songbook.songs.map((song, index) => ({
+      songIndex: index,
+      number: song.bookNumber ?? index + 1,
+      name: song.name,
+      author: song.author || song.interpreter || null,
+      tonalKey: song.tonalKey ?? null,
+      id: song.id ?? null,
+    }));
+    return ordered.map((entry) => {
+      const song = result.songbook.songs[entry.songIndex];
+      const firstPage = result.firstPages[entry.songIndex] ?? 1;
+      return { entry, song, index: entry.songIndex, firstPage };
     }).filter(({ song }) => {
+      if (!song) return false;
       if (!q) return true;
       return `${song.name} ${song.author ?? ''} ${song.interpreter ?? ''}`.toLocaleLowerCase().includes(q);
     });
@@ -56,7 +66,7 @@ export function SongDrawer({ open, onClose, result, currentPage, onSelect, onPri
         </div>
         <div className="drawer-list">
           {entries.length === 0 && <p className="drawer-empty">No songs match “{query}”.</p>}
-          {entries.map(({ song, index, firstPage }) => {
+          {entries.map(({ entry, song, index, firstPage }) => {
             const active = currentPage === firstPage - 1;
             return (
               <button
@@ -68,7 +78,7 @@ export function SongDrawer({ open, onClose, result, currentPage, onSelect, onPri
                 }}
                 key={song.id ?? index}
               >
-                <span className="drawer-number">{String(song.bookNumber ?? index + 1).padStart(2, '0')}</span>
+                <span className="drawer-number">{String(entry.number ?? song.bookNumber ?? index + 1).padStart(2, '0')}</span>
                 <span className="drawer-song">
                   <span className="drawer-song-name">{song.name}</span>
                   <span className="drawer-song-meta">

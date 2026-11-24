@@ -51,10 +51,10 @@ export function PreviewStage({
   currentPage,
   onPageChange,
   onOpenContents,
-  onOpenSettings,
+  onToggleSettings,
+  settingsOpen,
   onPrint,
   reflowing,
-  mobile,
 }) {
   const stageRef = useRef(null);
   const [stageSize, setStageSize] = useState({ width: 900, height: 700 });
@@ -115,16 +115,60 @@ export function PreviewStage({
 
   return (
     <section className="preview-pane">
+      <div className="preview-stage" ref={stageRef}>
+        <div className="stage-grain" aria-hidden="true" />
+        {!result && (
+          <div className="stage-loading">
+            <div className="loading-orbit"><Loader2 size={26} className="spin" /></div>
+            <strong>Preparing the preview…</strong>
+            <p>Building the song pages.</p>
+          </div>
+        )}
+        {result && page && (
+          <div className="paper-frame" style={{ width: `${pageWidth}px`, height: `${pageHeight}px` }}>
+            <div className="paper-clip">
+              <div
+                className="paper-scaler"
+                style={{
+                  width: `${geometry.widthPx}px`,
+                  height: `${geometry.heightPx}px`,
+                  transform: `scale(${scale})`,
+                }}
+              >
+                <PaperPage
+                  page={page}
+                  book={result.songbook}
+                  settings={appliedSettings}
+                  geometry={geometry}
+                />
+              </div>
+            </div>
+            <div className="paper-shadow" aria-hidden="true" />
+          </div>
+        )}
+        {reflowing && result && (
+          <div className="reflow-overlay">
+            <Loader2 size={17} className="spin" />
+            <span>Reflowing pages…</span>
+          </div>
+        )}
+      </div>
+
       <div className="preview-toolbar">
         <div className="preview-toolbar-left">
           {result && <PageNavigator currentPage={currentPage} pageCount={result.pageCount} onChange={onPageChange} />}
         </div>
         <div className="preview-toolbar-right">
           <button type="button" className="toolbar-button" onClick={onOpenContents}>
-            <ListMusic size={15} /> <span>Contents</span>
+            <ListMusic size={16} /> <span>Contents</span>
           </button>
-          <button type="button" className="toolbar-button mobile-settings-button" onClick={onOpenSettings}>
-            <Settings2 size={15} /> <span>Settings</span>
+          <button
+            type="button"
+            className={`toolbar-button settings-toggle-button${settingsOpen ? ' is-active' : ''}`}
+            onClick={onToggleSettings}
+            aria-expanded={settingsOpen}
+          >
+            <Settings2 size={16} /> <span>Settings</span>
           </button>
           <div className="zoom-control">
             <button type="button" className="mini-icon" onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.1).toFixed(2))))} aria-label="Zoom out">
@@ -137,47 +181,15 @@ export function PreviewStage({
               <Plus size={14} />
             </button>
           </div>
-          <button type="button" className="primary-button toolbar-print" onClick={onPrint}>
-            <Printer size={16} /> <span>Print / PDF</span>
+          <button
+            type="button"
+            className="primary-button header-print"
+            onClick={onPrint}
+            disabled={!result || reflowing}
+          >
+            <Printer size={16} /> <span>Print</span>
           </button>
         </div>
-      </div>
-
-      <div className="preview-stage" ref={stageRef}>
-        <div className="stage-grain" aria-hidden="true" />
-        {!result && (
-          <div className="stage-loading">
-            <div className="loading-orbit"><Loader2 size={26} className="spin" /></div>
-            <strong>Preparing the preview…</strong>
-            <p>Building the song pages.</p>
-          </div>
-        )}
-        {result && page && (
-          <div className="paper-frame" style={{ width: `${pageWidth}px`, height: `${pageHeight}px` }}>
-            <div
-              className="paper-scaler"
-              style={{
-                width: `${geometry.widthPx}px`,
-                height: `${geometry.heightPx}px`,
-                transform: `scale(${scale})`,
-              }}
-            >
-              <PaperPage
-                page={page}
-                book={result.songbook}
-                settings={appliedSettings}
-                geometry={geometry}
-              />
-            </div>
-            <div className="paper-shadow" aria-hidden="true" />
-          </div>
-        )}
-        {reflowing && result && (
-          <div className="reflow-overlay">
-            <Loader2 size={17} className="spin" />
-            <span>Reflowing pages…</span>
-          </div>
-        )}
       </div>
     </section>
   );

@@ -1,4 +1,3 @@
-import { sortSongs } from './settings.js';
 
 /**
  * Convert Kytario's compact section/token format into the line model used by
@@ -234,12 +233,12 @@ export function songMetaParts(song) {
   return parts;
 }
 
-export function buildBookModel(songbook, order = 'title') {
+export function buildBookModel(songbook) {
   const songs = (songbook.songs ?? []).map((song, index) => ({
     ...song,
     bookNumber: index + 1,
   }));
-  return { ...songbook, songs: sortSongs(songs, order).map(buildSongModel) };
+  return { ...songbook, songs: songs.map(buildSongModel) };
 }
 
 /** Exported for unit tests. */

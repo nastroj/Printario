@@ -23,9 +23,9 @@ function styleVars(settings, { columns, typeScale }) {
     '--heading-color': settings.headingColor,
     '--lyrics-color': settings.lyricsColor,
     '--chords-color': settings.chordsColor,
-    '--section-rule': KYTARIO_PALETTE.rule,
-    '--chorus-rule': KYTARIO_PALETTE.chorus,
-    '--badge-bg': KYTARIO_PALETTE.badge,
+    '--section-rule': settings.ruleColor ?? KYTARIO_PALETTE.rule,
+    '--chorus-rule': settings.chorusColor ?? KYTARIO_PALETTE.chorus,
+    '--badge-bg': settings.badgeColor ?? KYTARIO_PALETTE.badge,
   };
 }
 

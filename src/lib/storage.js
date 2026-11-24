@@ -53,11 +53,29 @@ export async function readCachedSongbook(token) {
   }
 }
 
+export async function deleteCachedSongbook(token) {
+  if (!token) return;
+  try {
+    const db = await openDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(token);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch {
+    // Cache is a convenience; ignore storage failures.
+  }
+}
+
 export function loadRecent() {
   try {
     const raw = localStorage.getItem(RECENT_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.slice(0, 7) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((entry) => entry && !entry.demo && entry.token !== 'printario-demo').slice(0, 7)
+      : [];
   } catch {
     return [];
   }
@@ -69,7 +87,6 @@ export function addRecent(data) {
     name: data.name,
     songCount: data.songs?.length ?? data.songCount ?? 0,
     sourceUrl: data.sourceUrl,
-    demo: Boolean(data.demo),
     at: Date.now(),
   };
   const next = [item, ...loadRecent().filter((entry) => entry.token !== item.token)].slice(0, 7);
@@ -78,5 +95,16 @@ export function addRecent(data) {
   } catch {
     // no-op
   }
+  return next;
+}
+
+export function removeRecent(token) {
+  const next = loadRecent().filter((entry) => entry.token !== token);
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    // no-op
+  }
+  deleteCachedSongbook(token);
   return next;
 }

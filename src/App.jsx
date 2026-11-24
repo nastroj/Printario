@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Download, Info, Plus, Printer, Settings2, Sparkles, X,
+  Download, Info, Plus, Sparkles, X,
 } from 'lucide-react';
 import { ImportScreen } from './components/ImportScreen.jsx';
 import { PreviewStage } from './components/PreviewStage.jsx';
@@ -11,7 +11,7 @@ import { PaperPage } from './components/PaperPage.jsx';
 import { buildBookModel } from './lib/song.js';
 import { paginateBook } from './lib/paginate.js';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './lib/settings.js';
-import { addRecent, cacheSongbook, loadRecent, readCachedSongbook } from './lib/storage.js';
+import { addRecent, cacheSongbook, loadRecent, readCachedSongbook, removeRecent } from './lib/storage.js';
 
 function getLayoutKey(settings) {
   return JSON.stringify({
@@ -37,6 +37,9 @@ function getAppearance(settings) {
     headingColor: settings.headingColor,
     lyricsColor: settings.lyricsColor,
     chordsColor: settings.chordsColor,
+    ruleColor: settings.ruleColor,
+    chorusColor: settings.chorusColor,
+    badgeColor: settings.badgeColor,
     paperTint: settings.paperTint,
   };
 }
@@ -73,7 +76,7 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function StudioHeader({ book, onNewBook, onPrint, onOpenSettings, installPrompt, onInstall }) {
+function StudioHeader({ book, onNewBook, installPrompt, onInstall }) {
   return (
     <header className="studio-header">
       <div className="studio-brand">
@@ -90,14 +93,8 @@ function StudioHeader({ book, onNewBook, onPrint, onOpenSettings, installPrompt,
             <Download size={15} /> <span>Install app</span>
           </button>
         )}
-        <button type="button" className="header-link" onClick={onNewBook}>
+        <button type="button" className="header-link" onClick={onNewBook} aria-label="New songbook">
           <Plus size={15} /> <span>New songbook</span>
-        </button>
-        <button type="button" className="header-icon-mobile" onClick={onOpenSettings} aria-label="Print settings">
-          <Settings2 size={18} />
-        </button>
-        <button type="button" className="primary-button header-print" onClick={onPrint}>
-          <Printer size={16} /> <span>Print / PDF</span>
         </button>
       </div>
     </header>
@@ -114,7 +111,7 @@ export default function App() {
   const [importError, setImportError] = useState(null);
   const [recent, setRecent] = useState(loadRecent);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [printMode, setPrintMode] = useState(false);
   const [toast, setToast] = useState(null);
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -125,8 +122,8 @@ export default function App() {
   const layoutKey = useMemo(() => getLayoutKey(settings), [settings]);
   const appliedLayoutRef = useRef(layoutKey);
   const book = useMemo(
-    () => (sourceData ? buildBookModel(sourceData, settings.songOrder) : null),
-    [sourceData, settings.songOrder],
+    () => (sourceData ? buildBookModel(sourceData) : null),
+    [sourceData],
   );
 
   useEffect(() => {
@@ -154,11 +151,13 @@ export default function App() {
       return undefined;
     }
 
-    // Appearance changes do not affect the page structure.
+    // Appearance changes do not affect the page structure; apply them immediately
+    // even if a layout reflow timer is also pending.
+    setResult((current) => (current
+      ? { ...current, settings: { ...current.settings, ...getAppearance(settings) } }
+      : current));
+
     if (layoutKey === appliedLayoutRef.current) {
-      setResult((current) => (current
-        ? { ...current, settings: { ...current.settings, ...getAppearance(settings) } }
-        : current));
       return undefined;
     }
 
@@ -196,13 +195,13 @@ export default function App() {
 
   const openData = useCallback((data, { cached = false } = {}) => {
     setSourceData(data);
-    setResult(paginateBook(buildBookModel(data, settings.songOrder), settings));
+    setResult(paginateBook(buildBookModel(data), settings));
     setCurrentPage(0);
     setImportError(null);
     appliedLayoutRef.current = layoutKey;
     setSettingsPending(false);
     setRecent(addRecent(data));
-    if (!data.demo) cacheSongbook(data);
+    cacheSongbook(data);
     if (cached) showToast('Opened the saved copy of this songbook.');
   }, [settings, layoutKey, showToast]);
 
@@ -246,29 +245,10 @@ export default function App() {
     }
   }, [importFromApi, openData]);
 
-  const handleDemo = useCallback(async () => {
-    setImporting(true);
-    setImportError(null);
-    try {
-      const response = await fetch('/api/demo');
-      const payload = await response.json();
-      if (!response.ok || !payload?.ok) throw new Error('The demo could not be loaded.');
-      openData(payload.data);
-    } catch (error) {
-      setImportError(error.message);
-    } finally {
-      setImporting(false);
-    }
-  }, [openData]);
-
   const handleRecent = useCallback(async (item) => {
     setImporting(true);
     setImportError(null);
     try {
-      if (item.demo) {
-        await handleDemo();
-        return;
-      }
       const cached = await readCachedSongbook(item.token);
       if (cached) {
         openData(cached, { cached: true });
@@ -281,12 +261,17 @@ export default function App() {
     } finally {
       setImporting(false);
     }
-  }, [handleDemo, importFromApi, openData]);
+  }, [importFromApi, openData]);
 
   const handlePrint = useCallback(() => {
     if (!result || settingsPending) return;
     setPrintMode(true);
   }, [result, settingsPending]);
+
+  const handleRemoveRecent = useCallback((item) => {
+    if (!item?.token) return;
+    setRecent(removeRecent(item.token));
+  }, []);
 
   useEffect(() => {
     if (!printMode) return undefined;
@@ -317,6 +302,11 @@ export default function App() {
   useEffect(() => {
     if (!result) return undefined;
     const handler = (event) => {
+      if (event.key === 'Escape' && settingsOpen) {
+        if (document.querySelector('[data-color-picker-modal="true"]')) return;
+        setSettingsOpen(false);
+        return;
+      }
       const tag = event.target?.tagName;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'p') {
@@ -324,7 +314,7 @@ export default function App() {
         handlePrint();
         return;
       }
-      if (drawerOpen || mobileSettingsOpen) return;
+      if (drawerOpen || settingsOpen) return;
       if (event.key === 'ArrowRight') {
         event.preventDefault();
         setCurrentPage((page) => Math.min(result.pageCount - 1, page + 1));
@@ -335,7 +325,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [result, drawerOpen, mobileSettingsOpen, handlePrint]);
+  }, [result, drawerOpen, settingsOpen, handlePrint]);
 
   const updateSetting = useCallback((key, value) => {
     setSettings((current) => ({ ...current, [key]: value }));
@@ -360,7 +350,7 @@ export default function App() {
     setImportError(null);
     setSettingsPending(false);
     setDrawerOpen(false);
-    setMobileSettingsOpen(false);
+    setSettingsOpen(false);
     setPrintMode(false);
   }, []);
 
@@ -380,15 +370,14 @@ export default function App() {
       <>
         <ImportScreen
           onImport={handleImport}
-          onDemo={handleDemo}
           loading={importing}
           error={importError}
           recent={recent}
           onOpenRecent={handleRecent}
+          onRemoveRecent={handleRemoveRecent}
           onDismissError={() => setImportError(null)}
         />
         <Toast toast={toast} onClose={() => setToast(null)} />
-        {mobileSettingsOpen && null}
       </>
     );
   }
@@ -397,51 +386,55 @@ export default function App() {
     <>
       <div className="app-shell">
         <StudioHeader
-        book={book}
-        onNewBook={newBook}
-        onPrint={handlePrint}
-        onOpenSettings={() => setMobileSettingsOpen(true)}
-        installPrompt={installPrompt}
-        onInstall={install}
-      />
-      <div className="studio-body">
-        <SettingsPanel
           book={book}
-          settings={settings}
-          update={updateSetting}
-          setMargin={updateMargins}
-          onReset={resetSettings}
-          onResetBook={newBook}
-          onOpenContents={() => setDrawerOpen(true)}
-          onPrint={handlePrint}
+          onNewBook={newBook}
+          installPrompt={installPrompt}
+          onInstall={install}
         />
-        <PreviewStage
+        <div className="studio-body">
+          <PreviewStage
+            result={result}
+            settings={settings}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+            onOpenContents={() => {
+              setSettingsOpen(false);
+              setDrawerOpen(true);
+            }}
+            onToggleSettings={() => {
+              setDrawerOpen(false);
+              setSettingsOpen((open) => !open);
+            }}
+            settingsOpen={settingsOpen}
+            onPrint={handlePrint}
+            reflowing={settingsPending}
+          />
+        </div>
+
+        <SongDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
           result={result}
-          settings={settings}
           currentPage={currentPage}
-          onPageChange={setCurrentPage}
-          onOpenContents={() => setDrawerOpen(true)}
-          onOpenSettings={() => setMobileSettingsOpen(true)}
-          onPrint={handlePrint}
-          reflowing={settingsPending}
+          onSelect={setCurrentPage}
+          onPrint={() => {
+            setDrawerOpen(false);
+            handlePrint();
+          }}
         />
-      </div>
 
-      <SongDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        result={result}
-        currentPage={currentPage}
-        onSelect={setCurrentPage}
-        onPrint={() => {
-          setDrawerOpen(false);
-          handlePrint();
-        }}
-      />
-
-      {mobileSettingsOpen && (
-        <div className="mobile-settings-layer">
-          <button type="button" className="drawer-backdrop" onClick={() => setMobileSettingsOpen(false)} aria-label="Close settings" />
+        <div
+          className={`settings-sheet-layer${settingsOpen ? ' is-open' : ''}`}
+          aria-hidden={!settingsOpen}
+          inert={!settingsOpen}
+        >
+          <button
+            type="button"
+            className="drawer-backdrop"
+            onClick={() => setSettingsOpen(false)}
+            aria-label="Close settings"
+            tabIndex={settingsOpen ? 0 : -1}
+          />
           <SettingsPanel
             book={book}
             settings={settings}
@@ -449,22 +442,20 @@ export default function App() {
             setMargin={updateMargins}
             onReset={resetSettings}
             onResetBook={() => {
-              setMobileSettingsOpen(false);
+              setSettingsOpen(false);
               newBook();
             }}
             onOpenContents={() => {
-              setMobileSettingsOpen(false);
+              setSettingsOpen(false);
               setDrawerOpen(true);
             }}
             onPrint={() => {
-              setMobileSettingsOpen(false);
+              setSettingsOpen(false);
               handlePrint();
             }}
-            isMobile
-            onClose={() => setMobileSettingsOpen(false)}
+            onClose={() => setSettingsOpen(false)}
           />
         </div>
-      )}
 
         <Toast toast={toast} onClose={() => setToast(null)} />
       </div>

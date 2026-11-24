@@ -6,7 +6,6 @@ import {
   ImportError,
   __test,
 } from './kytario.js';
-import { demoSongbook } from './demo.js';
 
 test('parses direct songbook URLs and locale prefixes', () => {
   assert.deepEqual(parseKytarioUrl('https://kytario.com/songbook'), {
@@ -113,12 +112,4 @@ test('preserves whitespace-only lyric tokens during import', () => {
   });
 
   assert.equal(song.sections[0].tokens[1].content, ' ');
-});
-
-test('demo songbook has three printable songs', () => {
-  assert.equal(demoSongbook.songs.length, 3);
-  for (const song of demoSongbook.songs) {
-    assert.ok(song.sections.length >= 3);
-    assert.ok(song.sections.every((section) => section.tokens.length > 0));
-  }
 });

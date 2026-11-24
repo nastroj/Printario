@@ -49,8 +49,6 @@ Paste any of these:
 - `https://kytario.com/song/<song-token>` — single-song import
 - A bare songbook token, e.g. `songbook`
 
-The demo button loads three original songs from `server/demo.js`, so the preview can be explored without touching Kytario.
-
 ## Why is there a server?
 
 Kytario's public songbook API does **not** send CORS headers, so a browser cannot call it from another origin. Printario includes a tiny Express proxy that:
@@ -76,7 +74,6 @@ The app is therefore a Node-hosted PWA, not a purely static site. For static hos
 server/
   index.js         Express server, API routes, static hosting
   kytario.js       URL parsing, Kytario fetching, normalization, metadata
-  demo.js          Original demo songbook
   kytario.test.js  Parser/importer unit tests
   song.test.js     Song model + Kytario layout/pagination unit tests
 src/
@@ -116,4 +113,4 @@ The UI smoke test uses synthetic layout measurements because jsdom has no layout
 
 ## License
 
-The code in this repository is provided as a working project. The demo lyrics are original and included for testing. Imported Kytario content is not part of the project and remains subject to its authors' rights.
+The code in this repository is provided as a working project. Imported Kytario content is not part of the project and remains subject to its authors' rights.

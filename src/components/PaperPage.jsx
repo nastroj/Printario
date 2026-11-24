@@ -11,8 +11,8 @@ function CoverPage({ book, columns }) {
   }).format(new Date());
   const sourceUrl = typeof book.sourceUrl === 'string' ? book.sourceUrl : '';
   const sourceLabel = sourceUrl.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-  const qrUrl = !book.demo && book.token
-    ? `https://kytario.com/api/songbooks/${encodeURIComponent(book.token)}/qr?format=svg`
+  const qrUrl = !book.singleSong && book.token
+    ? `/api/qr/${encodeURIComponent(book.token)}`
     : null;
   const notation = book.songs?.[0]?.notation;
   const notationText = notation === 'english'

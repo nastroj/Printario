@@ -1,4 +1,4 @@
-import { getColumnCount, getGeometry } from './settings.js';
+import { getColumnCount, getGeometry, sortSongs } from './settings.js';
 
 /**
  * Add optional front matter and assign one fixed-size page to each song.
@@ -21,11 +21,26 @@ export function paginateBook(book, settings) {
     return page;
   });
 
-  const tocEntries = book.songs.map((song, index) => ({
-    songIndex: index,
-    number: song.bookNumber ?? index + 1,
-    name: song.name,
-    author: song.author || song.interpreter || null,
+  const tocEntries = sortSongs(
+    book.songs.map((song, index) => ({
+      songIndex: index,
+      number: song.bookNumber ?? index + 1,
+      name: song.name,
+      author: song.author || song.interpreter || null,
+      interpreter: song.interpreter || null,
+      tonalKey: song.tonalKey ?? null,
+      id: song.id ?? null,
+    })),
+    settings.songOrder,
+  ).map(({
+    songIndex, number, name, author, tonalKey, id,
+  }) => ({
+    songIndex,
+    number,
+    name,
+    author,
+    tonalKey,
+    id,
   }));
 
   const pages = [];
@@ -53,6 +68,7 @@ export function paginateBook(book, settings) {
   return {
     pages,
     firstPages,
+    tocEntries,
     geometry,
     columns,
     pageCount: pages.length,

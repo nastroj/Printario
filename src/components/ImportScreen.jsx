@@ -1,39 +1,118 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowRight, ArrowUpRight, BookOpen, Check, Clock3, FileText,
-  Link2, Loader2, Printer, Sparkles, WandSparkles, X,
+  Link2, Loader2, Printer, Sparkles, Trash2, WandSparkles, X,
 } from 'lucide-react';
 import { Brand } from './Brand.jsx';
 
-function RecentRow({ item, onOpen }) {
+function RecentRow({ item, onOpen, onRequestRemove, disabled }) {
   return (
-    <button type="button" className="recent-row" onClick={() => onOpen(item)}>
-      <span className="recent-icon"><BookOpen size={16} /></span>
-      <span className="recent-text">
-        <span className="recent-name">{item.name}</span>
-        <span className="recent-meta">{item.songCount} songs · {item.demo ? 'Demo book' : 'Kytario'}</span>
-      </span>
-      <ArrowUpRight size={15} className="recent-arrow" />
-    </button>
+    <div className="recent-item">
+      <button type="button" className="recent-row" onClick={() => onOpen(item)} disabled={disabled}>
+        <span className="recent-icon"><BookOpen size={16} /></span>
+        <span className="recent-text">
+          <span className="recent-name">{item.name}</span>
+          <span className="recent-meta">{item.songCount} songs · Kytario</span>
+        </span>
+        <ArrowUpRight size={15} className="recent-arrow" />
+      </button>
+      <button
+        type="button"
+        className="recent-delete"
+        onClick={() => onRequestRemove(item)}
+        disabled={disabled}
+        aria-label={`Delete ${item.name} from recently opened`}
+        title={`Remove ${item.name}`}
+      >
+        <Trash2 size={15} />
+      </button>
+    </div>
   );
+}
+
+function ConfirmRemoveDialog({ item, onCancel, onConfirm }) {
+  useEffect(() => {
+    if (!item) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [item, onCancel]);
+
+  if (!item) return null;
+
+  const dialog = (
+    <div
+      className="confirm-layer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-remove-title"
+      data-confirm-remove-modal="true"
+    >
+      <div className="confirm-backdrop" onClick={onCancel} aria-hidden="true" />
+      <div className="confirm-dialog">
+        <div className="confirm-head">
+          <span className="confirm-icon" aria-hidden="true">
+            <Trash2 size={18} />
+          </span>
+          <div className="confirm-copy">
+            <h3 id="confirm-remove-title">Remove songbook?</h3>
+            <p>
+              Remove <strong>{item.name}</strong> from recently opened? Its saved copy on this device will be deleted.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="cp-close"
+            onClick={onCancel}
+            aria-label="Cancel removal"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="confirm-actions">
+          <button type="button" className="confirm-cancel-btn" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="confirm-delete-btn" onClick={onConfirm}>
+            <Trash2 size={14} />
+            Remove
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return typeof document !== 'undefined' && document.body
+    ? createPortal(dialog, document.body)
+    : dialog;
 }
 
 export function ImportScreen({
   onImport,
-  onDemo,
   loading,
   error,
   recent,
   onOpenRecent,
+  onRemoveRecent,
   onDismissError,
 }) {
   const [url, setUrl] = useState('');
   const [focused, setFocused] = useState(false);
+  const [confirmItem, setConfirmItem] = useState(null);
 
   const submit = (event) => {
     event.preventDefault();
     if (loading) return;
     onImport(url);
+  };
+
+  const handleConfirmRemove = () => {
+    if (!confirmItem) return;
+    onRemoveRecent?.(confirmItem);
+    setConfirmItem(null);
   };
 
   return (
@@ -101,10 +180,6 @@ export function ImportScreen({
           )}
 
           <div className="landing-actions">
-            <button type="button" className="text-button demo-button" onClick={onDemo} disabled={loading}>
-              <WandSparkles size={16} />
-              Explore the demo book
-            </button>
             <span className="privacy-note"><Check size={13} /> Public songbooks only · No account needed</span>
           </div>
 
@@ -112,7 +187,15 @@ export function ImportScreen({
             <div className="recent-block">
               <div className="recent-heading"><Clock3 size={13} /> Recently opened</div>
               <div className="recent-list">
-                {recent.map((item) => <RecentRow item={item} onOpen={onOpenRecent} key={item.token} />)}
+                {recent.map((item) => (
+                  <RecentRow
+                    item={item}
+                    onOpen={onOpenRecent}
+                    onRequestRemove={setConfirmItem}
+                    disabled={loading}
+                    key={item.token}
+                  />
+                ))}
               </div>
             </div>
           )}
@@ -178,6 +261,12 @@ export function ImportScreen({
         <span>Printario is an independent tool for Kytario users.</span>
         <span>Made for the campfire, the choir and the band.</span>
       </footer>
+
+      <ConfirmRemoveDialog
+        item={confirmItem}
+        onCancel={() => setConfirmItem(null)}
+        onConfirm={handleConfirmRemove}
+      />
     </div>
   );
 }

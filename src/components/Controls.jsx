@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
+import { ChevronDown, Minus, Plus } from 'lucide-react';
+import { normalizeHex } from '../lib/color.js';
+import { ColorPickerDialog } from './ColorPickerDialog.jsx';
 
 export function PanelSection({ icon: Icon, title, hint, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -36,6 +38,114 @@ export function Segmented({ value, options, onChange, columns = 2, ariaLabel }) 
           <span>{option.label}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+function roundToStep(value, step) {
+  const stepText = String(step);
+  const decimals = stepText.includes('.') ? stepText.split('.')[1].length : 0;
+  return Number(value.toFixed(decimals));
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function StepperControl({
+  label, value, min, max, step = 1, hint, format, onChange,
+}) {
+  const stepText = String(step);
+  const maxDecimals = stepText.includes('.') ? Math.max(2, stepText.split('.')[1].length) : 0;
+  const formatDisplay = (num) => (format ? format(num) : String(roundToStep(num, step)));
+  const [draft, setDraft] = useState(() => formatDisplay(value));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setDraft(formatDisplay(value));
+  }, [value, focused]);
+
+  const stepBy = (delta) => {
+    const next = clamp(roundToStep(value + delta, step), min, max);
+    onChange(next);
+    setDraft(formatDisplay(next));
+  };
+
+  const commitDraft = (raw) => {
+    const normalized = String(raw).replace(',', '.').trim();
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed)) {
+      setDraft(formatDisplay(value));
+      return;
+    }
+    const next = clamp(Number(parsed.toFixed(maxDecimals)), min, max);
+    onChange(next);
+    setDraft(formatDisplay(next));
+  };
+
+  return (
+    <div className="stepper-control">
+      <div className="stepper-meta">
+        <span className="stepper-label">{label}</span>
+        {hint && <span className="stepper-hint">{hint}</span>}
+      </div>
+      <div className="stepper-box">
+        <button
+          type="button"
+          className="stepper-btn"
+          onClick={() => stepBy(-step)}
+          disabled={value <= min}
+          aria-label={`Decrease ${label}`}
+        >
+          <Minus size={14} />
+        </button>
+        <input
+          type="number"
+          inputMode={maxDecimals === 0 ? 'numeric' : 'decimal'}
+          className="stepper-input"
+          min={min}
+          max={max}
+          step={step}
+          value={draft}
+          aria-label={label}
+          onFocus={(event) => {
+            setFocused(true);
+            event.target.select();
+          }}
+          onChange={(event) => {
+            const raw = event.target.value;
+            setDraft(raw);
+            const parsed = Number.parseFloat(raw.replace(',', '.'));
+            if (Number.isFinite(parsed) && parsed >= min && parsed <= max) {
+              onChange(Number(parsed.toFixed(maxDecimals)));
+            }
+          }}
+          onBlur={() => {
+            setFocused(false);
+            commitDraft(draft);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.currentTarget.blur();
+            } else if (event.key === 'ArrowUp') {
+              event.preventDefault();
+              stepBy(step);
+            } else if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              stepBy(-step);
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="stepper-btn"
+          onClick={() => stepBy(step)}
+          disabled={value >= max}
+          aria-label={`Increase ${label}`}
+        >
+          <Plus size={14} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -84,36 +194,94 @@ export function Toggle({ label, hint, checked, onChange }) {
   );
 }
 
-export function ColorControl({ label, value, onChange }) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-
-  const commit = (next) => {
-    setDraft(next);
-    if (/^#[0-9a-fA-F]{6}$/.test(next)) onChange(next);
-  };
+export function ColorSwatchButton({
+  id,
+  value,
+  defaultColor,
+  pickerTitle,
+  title = 'Change color',
+  swatches,
+  size = 'md',
+  onChange,
+  open: controlledOpen,
+  onOpenChange,
+}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
+  const hexLabel = (normalizeHex(value) ?? value ?? '#000000').toUpperCase();
 
   return (
-    <div className="color-control">
-      <span className="control-label"><span>{label}</span></span>
-      <div className="color-input-row">
-        <label className="color-swatch" style={{ '--swatch': value }}>
-          <input
-            type="color"
-            value={value}
-            onChange={(event) => commit(event.target.value)}
-            aria-label={`${label} color picker`}
-          />
+    <>
+      <button
+        type="button"
+        id={id}
+        className={`color-swatch-btn is-${size}`}
+        style={{ backgroundColor: value }}
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen(true);
+        }}
+        title={`${title} (${hexLabel})`}
+        aria-label={`${pickerTitle || title}: ${hexLabel}`}
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
+      />
+      <ColorPickerDialog
+        isOpen={isOpen}
+        title={pickerTitle || title}
+        value={value}
+        defaultColor={defaultColor}
+        swatches={swatches}
+        onConfirm={(nextHex) => {
+          setOpen(false);
+          if (nextHex !== value) onChange(nextHex);
+        }}
+        onCancel={() => setOpen(false)}
+      />
+    </>
+  );
+}
+
+export function ColorControl({
+  label,
+  value,
+  defaultColor,
+  hint,
+  swatches,
+  onChange,
+}) {
+  const [open, setOpen] = useState(false);
+  const buttonId = useId();
+  const hexLabel = (normalizeHex(value) ?? value ?? '#000000').toUpperCase();
+
+  return (
+    <div
+      className="color-card"
+      onClick={() => setOpen(true)}
+      title={hint || `${label} (${hexLabel})`}
+    >
+      <div className="color-card-text">
+        <label
+          htmlFor={buttonId}
+          className="color-card-label"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {label}
         </label>
-        <input
-          className="color-hex"
-          value={draft}
-          onChange={(event) => commit(event.target.value)}
-          spellCheck="false"
-          maxLength={7}
-          aria-label={`${label} hex color`}
-        />
+        <span className="color-card-hex">{hexLabel}</span>
       </div>
+      <ColorSwatchButton
+        id={buttonId}
+        value={value}
+        defaultColor={defaultColor}
+        pickerTitle={label}
+        title={hint || `Change ${label.toLowerCase()} color`}
+        swatches={swatches}
+        onChange={onChange}
+        open={open}
+        onOpenChange={setOpen}
+      />
     </div>
   );
 }

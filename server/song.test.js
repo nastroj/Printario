@@ -118,24 +118,44 @@ test('column count follows orientation unless overridden', () => {
   assert.ok(getTypeScale(landscape, 2) > 1);
 });
 
-test('books default to title order while preserving original song numbers', () => {
+test('books keep original songbook order while ToC defaults to title A-Z with original numbers', () => {
   const book = buildBookModel({
     name: 'Test',
     songs: [
-      { id: 1, name: 'Zebra', sections: [] },
-      { id: 2, name: 'Álpha', sections: [] },
-      { id: 3, name: 'Beta', sections: [] },
+      { id: 1, name: 'Zebra', author: 'Charlie', sections: [] },
+      { id: 2, name: 'Álpha', author: 'Bob', sections: [] },
+      { id: 3, name: 'Beta', author: 'Alice', sections: [] },
     ],
   });
 
   assert.deepEqual(
     book.songs.map(({ name, bookNumber }) => [name, bookNumber]),
-    [['Álpha', 2], ['Beta', 3], ['Zebra', 1]],
+    [['Zebra', 1], ['Álpha', 2], ['Beta', 3]],
   );
-  const toc = paginateBook(book, DEFAULT_SETTINGS).pages.find((page) => page.type === 'contents');
+
+  const defaultResult = paginateBook(book, DEFAULT_SETTINGS);
+  const toc = defaultResult.pages.find((page) => page.type === 'contents');
   assert.deepEqual(
-    toc.entries.map(({ name, number }) => [name, number]),
-    [['Álpha', 2], ['Beta', 3], ['Zebra', 1]],
+    toc.entries.map(({ name, number, songIndex }) => [name, number, songIndex]),
+    [['Álpha', 2, 1], ['Beta', 3, 2], ['Zebra', 1, 0]],
+  );
+  assert.deepEqual(
+    defaultResult.pages.filter((page) => page.type === 'song').map((page) => page.song.name),
+    ['Zebra', 'Álpha', 'Beta'],
+  );
+
+  const manualToc = paginateBook(book, { ...DEFAULT_SETTINGS, songOrder: 'manual' })
+    .pages.find((page) => page.type === 'contents');
+  assert.deepEqual(
+    manualToc.entries.map(({ name, number }) => [name, number]),
+    [['Zebra', 1], ['Álpha', 2], ['Beta', 3]],
+  );
+
+  const authorToc = paginateBook(book, { ...DEFAULT_SETTINGS, songOrder: 'author' })
+    .pages.find((page) => page.type === 'contents');
+  assert.deepEqual(
+    authorToc.entries.map(({ name, number }) => [name, number]),
+    [['Beta', 3], ['Álpha', 2], ['Zebra', 1]],
   );
 });
 

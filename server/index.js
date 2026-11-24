@@ -1,15 +1,23 @@
 import express from 'express';
 import compression from 'compression';
+import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
-import { importFromKytario, parseKytarioUrl, ImportError } from './kytario.js';
-import { demoSongbook } from './demo.js';
+import { importFromKytario, fetchSongbookQrSvg, parseKytarioUrl, ImportError } from './kytario.js';
+
+function readCliFlag(name) {
+  const idx = process.argv.indexOf(name);
+  if (idx !== -1 && idx + 1 < process.argv.length) return process.argv[idx + 1];
+  const eq = process.argv.find((arg) => arg.startsWith(`${name}=`));
+  return eq ? eq.slice(name.length + 1) : undefined;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const IS_PROD = process.env.NODE_ENV === 'production';
-const PORT = Number(process.env.PORT || 5173);
+const PORT = Number(readCliFlag('--port') || process.env.PORT || 5173);
+const HOST = readCliFlag('--host') || process.env.HOST || '0.0.0.0';
 
 const app = express();
 app.disable('x-powered-by');
@@ -19,7 +27,6 @@ app.use(express.json({ limit: '16kb' }));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   next();
 });
 
@@ -102,9 +109,15 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, version: '1.0.0' });
 });
 
-app.get('/api/demo', (_req, res) => {
-  res.setHeader('Cache-Control', 'public, max-age=3600');
-  res.json({ ok: true, data: demoSongbook });
+app.get('/api/qr/:token', async (req, res, next) => {
+  try {
+    const svg = await fetchSongbookQrSvg(req.params.token);
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(svg);
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post('/api/import', rateLimit, async (req, res, next) => {
@@ -162,6 +175,8 @@ app.use((error, _req, res, _next) => {
   });
 });
 
+const server = http.createServer(app);
+
 if (IS_PROD) {
   const dist = path.join(ROOT, 'dist');
   if (!existsSync(dist)) {
@@ -183,16 +198,27 @@ if (IS_PROD) {
     res.sendFile(path.join(dist, 'index.html'));
   });
 } else {
+  const disableHmr = process.env.DISABLE_HMR === 'true';
   const { createServer } = await import('vite');
   const vite = await createServer({
     root: ROOT,
-    server: { middlewareMode: true },
+    server: {
+      middlewareMode: true,
+      allowedHosts: true,
+      hmr: disableHmr ? false : { server },
+      ...(disableHmr ? { ws: false } : {}),
+    },
     appType: 'spa',
   });
   app.use(vite.middlewares);
 }
 
-app.listen(PORT, () => {
+server.on('error', (error) => {
+  console.error('[printario] Server failed to start:', error);
+  process.exit(1);
+});
+
+server.listen(PORT, HOST, () => {
   console.log(`\n  Printario ${IS_PROD ? 'production' : 'dev'} server`);
-  console.log(`  ➜  http://localhost:${PORT}\n`);
+  console.log(`  ➜  http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n`);
 });
