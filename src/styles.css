@@ -727,18 +727,7 @@ svg {
   }
 }
 
-/* ---------- PDF export container & progress dialog ---------- */
-
-.pdf-render-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: auto;
-  height: auto;
-  pointer-events: none;
-  z-index: 10;
-  overflow: visible;
-}
+/* ---------- PDF progress dialog ---------- */
 
 .pdf-progress-dialog {
   max-width: 360px;
