@@ -1,9 +1,9 @@
 import {
-  ArrowUpRight, BookOpen, Check, Download, FileText, LayoutList, ListMusic,
+  ArrowUpRight, BookOpen, Download, FileText, LayoutList, ListMusic,
   Palette, Printer, RotateCcw, Type, X,
 } from 'lucide-react';
 import {
-  COLOR_PRESETS, FONT_STACKS, KYTARIO_PALETTE, MARGIN_PRESETS, PAPER_SIZES, PAPER_TINTS,
+  COLOR_PRESETS, FONT_STACKS, KYTARIO_PALETTE, PAPER_SIZES, PAPER_TINTS,
   getColumnCount, getGeometry, getTypeScale,
 } from '../lib/settings.js';
 import { PAPER_SWATCHES } from '../lib/color.js';
@@ -101,36 +101,34 @@ export function SettingsPanel({
             ]}
           />
 
-          <span className="control-label spaced"><span>Margins</span></span>
-          <div className="preset-row">
-            {Object.entries(MARGIN_PRESETS).map(([key, preset]) => {
-              const active = ['top', 'right', 'bottom', 'left'].every((side) => settings.margins[side] === preset[side]);
-              return (
-                <button
-                  type="button"
-                  className={`preset-chip${active ? ' is-active' : ''}`}
-                  onClick={() => setMargin(null, preset)}
-                  key={key}
-                >
-                  {key === 'kytario' && <Check size={12} />}
-                  {key[0].toUpperCase() + key.slice(1)}
-                </button>
-              );
-            })}
+          <div className="toggle-stack spaced">
+            <Toggle
+              label="Book mode"
+              hint="Mirror inner and outer margins and alternate song number badges left/right on facing pages."
+              checked={Boolean(settings.bookMode)}
+              onChange={(v) => update('bookMode', v)}
+            />
           </div>
+
+          <span className="control-label spaced">
+            <span>Margins</span>
+            <span className="control-value">
+              {Number(layoutGeometry.contentWidthMm.toFixed(1))} × {Number(layoutGeometry.contentHeightMm.toFixed(1))} mm
+            </span>
+          </span>
           <div className="margin-grid">
             {[
               ['top', 'Top'],
-              ['right', 'Right'],
+              ['right', settings.bookMode ? 'Outer' : 'Right'],
               ['bottom', 'Bottom'],
-              ['left', 'Left'],
+              ['left', settings.bookMode ? 'Inner' : 'Left'],
             ].map(([side, label]) => (
               <StepperControl
                 key={side}
                 label={label}
                 hint="mm"
                 value={settings.margins[side]}
-                min={6}
+                min={0}
                 max={38}
                 step={1}
                 onChange={(value) => setMargin(side, value)}

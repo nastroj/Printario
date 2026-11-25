@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildBookModel, buildSongModel } from '../src/lib/song.js';
 import { paginateBook } from '../src/lib/paginate.js';
-import { DEFAULT_SETTINGS, getColumnCount, getGeometry, getTypeScale } from '../src/lib/settings.js';
+import {
+  DEFAULT_MARGINS, DEFAULT_SETTINGS, getColumnCount, getGeometry, getPageMargins, getTypeScale,
+  loadSettings,
+} from '../src/lib/settings.js';
 
 function songWith(tokens, title = '1.') {
   return {
@@ -189,4 +192,51 @@ test('pagination assigns one fixed page to each song with correct front-matter n
   assert.deepEqual(result.firstPages, [3, 4]);
   assert.equal(result.pages[2].fit, undefined);
   assert.equal(result.pages[3].fit, undefined);
+});
+
+test('default A4 landscape margins produce 280 x 198 mm printed content and mirror in book mode', () => {
+  assert.deepEqual(DEFAULT_MARGINS, { top: 6, right: 5, bottom: 6, left: 12 });
+  assert.equal(DEFAULT_SETTINGS.bookMode, false);
+
+  const normalGeo = getGeometry(DEFAULT_SETTINGS);
+  assert.equal(normalGeo.widthMm, 297);
+  assert.equal(normalGeo.heightMm, 210);
+  assert.equal(normalGeo.contentWidthMm, 280);
+  assert.equal(normalGeo.contentHeightMm, 198);
+
+  assert.deepEqual(getPageMargins(DEFAULT_SETTINGS, 1), { top: 6, right: 5, bottom: 6, left: 12 });
+  assert.deepEqual(getPageMargins(DEFAULT_SETTINGS, 2), { top: 6, right: 5, bottom: 6, left: 12 });
+
+  const bookSettings = { ...DEFAULT_SETTINGS, bookMode: true };
+  assert.deepEqual(getPageMargins(bookSettings, 1), { top: 6, right: 5, bottom: 6, left: 12 });
+  assert.deepEqual(getPageMargins(bookSettings, 2), { top: 6, right: 12, bottom: 6, left: 5 });
+  assert.deepEqual(getPageMargins(bookSettings, 3), { top: 6, right: 5, bottom: 6, left: 12 });
+
+  const evenGeo = getGeometry(bookSettings, 2);
+  assert.equal(evenGeo.contentWidthMm, 280);
+  assert.equal(evenGeo.contentHeightMm, 198);
+});
+
+test('loadSettings migrates legacy v2 7mm default margins to 6/5/6/12mm', () => {
+  const prevStorage = globalThis.localStorage;
+  const store = new Map([
+    ['printario.settings.v2', JSON.stringify({
+      paper: 'A4',
+      margins: { top: 7, right: 7, bottom: 7, left: 7 },
+      fontFamily: 'lora',
+    })],
+  ]);
+  globalThis.localStorage = {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => store.set(key, value),
+  };
+
+  try {
+    const migrated = loadSettings();
+    assert.deepEqual(migrated.margins, { top: 6, right: 5, bottom: 6, left: 12 });
+    assert.equal(migrated.fontFamily, 'lora');
+    assert.equal(migrated.bookMode, false);
+  } finally {
+    globalThis.localStorage = prevStorage;
+  }
 });

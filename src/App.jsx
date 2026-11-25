@@ -19,6 +19,7 @@ function getLayoutKey(settings) {
     paper: settings.paper,
     orientation: settings.orientation,
     columns: settings.columns,
+    bookMode: Boolean(settings.bookMode),
     margins: settings.margins,
     fontFamily: settings.fontFamily,
     headingSize: settings.headingSize,

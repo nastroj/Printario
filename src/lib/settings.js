@@ -110,23 +110,18 @@ export const PAPER_TINTS = [
   { name: 'Cool', value: '#f9fbfc' },
 ];
 
-export const MARGIN_PRESETS = {
-  kytario: { top: 7, right: 7, bottom: 7, left: 7 },
-  classic: { top: 12, right: 12, bottom: 14, left: 12 },
-  roomy: { top: 20, right: 20, bottom: 22, left: 20 },
-};
-
-export const DEFAULT_MARGINS = { ...MARGIN_PRESETS.kytario };
+export const DEFAULT_MARGINS = { top: 6, right: 5, bottom: 6, left: 12 };
 
 export const DEFAULT_SETTINGS = {
   paper: 'A4',
   orientation: 'landscape',
   columns: 'auto',
+  bookMode: false,
   margins: { ...DEFAULT_MARGINS },
   fontFamily: 'inter',
-  // Reference type sizes for an A4 landscape page with 7 mm margins and two
-  // columns. They are scaled with the column width so every paper size keeps
-  // Kytario's proportions instead of becoming cramped or sparse.
+  // Reference type sizes for an A4 landscape page and two columns. They are
+  // scaled with the column width so every paper size keeps Kytario's
+  // proportions instead of becoming cramped or sparse.
   headingSize: 14.5,
   lyricsSize: 13.25,
   chordsSize: 13.25,
@@ -152,7 +147,8 @@ export const DEFAULT_SETTINGS = {
  */
 export const REFERENCE_COLUMN_PX = 505;
 
-const SETTINGS_KEY = 'printario.settings.v2';
+const SETTINGS_KEY = 'printario.settings.v3';
+const LEGACY_SETTINGS_KEY = 'printario.settings.v2';
 
 export function getColumnCount(settings, geometry) {
   if (settings.columns === 'one') return 1;
@@ -172,20 +168,42 @@ export function getTypeScale(geometry, columns) {
   return Math.max(0.5, Math.min(2.4, scale));
 }
 
+function isLegacyDefaultMargins(margins) {
+  return Boolean(
+    margins
+    && margins.top === 7
+    && margins.right === 7
+    && margins.bottom === 7
+    && margins.left === 7,
+  );
+}
+
 export function loadSettings() {
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
+    const rawV3 = localStorage.getItem(SETTINGS_KEY);
+    const rawV2 = rawV3 ? null : localStorage.getItem(LEGACY_SETTINGS_KEY);
+    const raw = rawV3 ?? rawV2;
     if (!raw) return { ...DEFAULT_SETTINGS, margins: { ...DEFAULT_MARGINS } };
     const saved = JSON.parse(raw);
+    const migratedMargins = rawV2 && isLegacyDefaultMargins(saved?.margins)
+      ? DEFAULT_MARGINS
+      : (saved?.margins ?? {});
     const merged = {
       ...DEFAULT_SETTINGS,
       ...saved,
-      margins: { ...DEFAULT_SETTINGS.margins, ...(saved?.margins ?? {}) },
+      margins: { ...DEFAULT_SETTINGS.margins, ...migratedMargins },
     };
     delete merged.autoFit;
     delete merged.autoFitStrength;
     delete merged.autoFitFill;
     delete merged.pageNumbers;
+    merged.bookMode = Boolean(merged.bookMode);
+    for (const side of ['top', 'right', 'bottom', 'left']) {
+      const value = Number(merged.margins[side]);
+      merged.margins[side] = Number.isFinite(value)
+        ? Math.min(38, Math.max(0, value))
+        : DEFAULT_MARGINS[side];
+    }
     if (!PAPER_SIZES[merged.paper]) merged.paper = DEFAULT_SETTINGS.paper;
     if (!['portrait', 'landscape'].includes(merged.orientation)) merged.orientation = 'landscape';
     if (!['auto', 'one', 'two'].includes(merged.columns)) merged.columns = 'auto';
@@ -208,12 +226,35 @@ export function saveSettings(settings) {
   }
 }
 
-export function getGeometry(settings) {
+/**
+ * Resolve page margins for a specific 1-based page number.
+ * In book mode, `left` represents the inner (binding) margin and `right`
+ * represents the outer margin, so even (left-hand) pages swap left/right.
+ */
+export function getPageMargins(settings, pageNumber = 1) {
+  const m = settings?.margins ?? DEFAULT_MARGINS;
+  if (settings?.bookMode && pageNumber % 2 === 0) {
+    return {
+      top: m.top,
+      right: m.left,
+      bottom: m.bottom,
+      left: m.right,
+    };
+  }
+  return {
+    top: m.top,
+    right: m.right,
+    bottom: m.bottom,
+    left: m.left,
+  };
+}
+
+export function getGeometry(settings, pageNumber = 1) {
   const paper = PAPER_SIZES[settings.paper] ?? PAPER_SIZES.A4;
   const landscape = settings.orientation === 'landscape';
   const width = landscape ? paper.height : paper.width;
   const height = landscape ? paper.width : paper.height;
-  const m = settings.margins;
+  const m = getPageMargins(settings, pageNumber);
   const pxPerMm = 96 / 25.4;
   return {
     paper,

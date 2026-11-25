@@ -172,10 +172,11 @@ function SongSection({ section, settings, hideExpandableChords }) {
   );
 }
 
-function SongSheet({ song, index, settings, columns, typeScale }) {
+function SongSheet({ song, index, settings, columns, typeScale, badgeSide }) {
   return (
     <div
-      className="song-sheet"
+      className={`song-sheet is-badge-${badgeSide}`}
+      data-columns={columns}
       style={styleVars(settings, { columns, typeScale })}
     >
       <SongHeader song={song} index={index} settings={settings} />
@@ -194,6 +195,7 @@ function SongSheet({ song, index, settings, columns, typeScale }) {
 export function SongPageContent({ page, settings, geometry }) {
   const columns = getColumnCount(settings, geometry);
   const typeScale = getTypeScale(geometry, columns);
+  const badgeSide = settings.bookMode && page.number % 2 === 1 ? 'right' : 'left';
   return (
     <SongSheet
       song={page.song}
@@ -201,6 +203,7 @@ export function SongPageContent({ page, settings, geometry }) {
       settings={settings}
       columns={columns}
       typeScale={typeScale}
+      badgeSide={badgeSide}
     />
   );
 }

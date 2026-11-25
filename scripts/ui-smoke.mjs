@@ -188,9 +188,22 @@ try {
   const activeTitle = document.querySelector('.song-title')?.textContent;
   if (!activeTitle || activeTitle === title) throw new Error('Song navigation did not change the page');
 
-  // Open the settings sheet, change paper size to A5, and verify the layout updates.
+  // Open the settings sheet, verify margin presets are absent, test Book mode, then change paper size to A5.
   document.querySelector('.settings-toggle-button')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await waitFor('.settings-sheet-layer.is-open');
+  if (document.querySelector('.preset-row')) throw new Error('Margin presets should not be rendered');
+
+  const bookToggle = [...document.querySelectorAll('.toggle-row')]
+    .find((row) => row.textContent.includes('Book mode'))
+    ?.querySelector('button[role="switch"]');
+  if (!bookToggle) throw new Error('Book mode toggle missing');
+  bookToggle.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const marginLabels = [...document.querySelectorAll('.margin-grid .stepper-label')].map((el) => el.textContent.trim());
+  if (!marginLabels.includes('Outer') || !marginLabels.includes('Inner')) {
+    throw new Error(`Expected Outer/Inner margin labels in Book mode, got: ${marginLabels.join(', ')}`);
+  }
+
   const paperButtons = [...document.querySelectorAll('.segment')];
   const a5 = paperButtons.find((button) => button.textContent.trim() === 'A5');
   if (!a5) throw new Error('A5 paper option missing');
@@ -204,16 +217,35 @@ try {
   }
   await waitFor('.paper-page', 8000);
 
-  // Open the print flow; the print root should mount and print() should be called.
+  // Open the print flow; verify mirrored margins and alternating page numbers across pages.
   document.querySelector('.header-print')?.click();
   const deadline = Date.now() + 5000;
   while (!document.querySelector('.print-root') && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   await new Promise((resolve) => setTimeout(resolve, 400));
-  const printedPages = document.querySelectorAll('.print-root .paper-page').length;
+  const printedPageEls = [...document.querySelectorAll('.print-root .paper-page')];
+  const printedPages = printedPageEls.length;
   if (!printedPages) {
     throw new Error('Print root did not render pages');
+  }
+  if (document.querySelector('.book-page-number')) {
+    throw new Error('Separate small page numbers should not be rendered');
+  }
+  if (printedPageEls[1]?.style.getPropertyValue('--margin-left') !== '5' || printedPageEls[1]?.style.getPropertyValue('--margin-right') !== '12') {
+    throw new Error('Page 2 (even) should mirror outer=5mm on left and inner=12mm on right');
+  }
+  if (!printedPageEls[2]?.querySelector('.song-sheet.is-badge-right')) {
+    throw new Error('Page 3 (odd) should place song number badge on the right top corner');
+  }
+  if (printedPageEls[2]?.style.getPropertyValue('--margin-left') !== '12' || printedPageEls[2]?.style.getPropertyValue('--margin-right') !== '5') {
+    throw new Error('Page 3 (odd) should place inner=12mm on left and outer=5mm on right');
+  }
+  if (!printedPageEls[3]?.querySelector('.song-sheet.is-badge-left')) {
+    throw new Error('Page 4 (even) should place song number badge on the left top corner');
+  }
+  if (!printedPageEls[4]?.querySelector('.song-sheet.is-badge-right')) {
+    throw new Error('Page 5 (odd) should place song number badge on the right top corner');
   }
   await new Promise((resolve) => setTimeout(resolve, 250));
 

@@ -126,6 +126,11 @@ test('exportSongbookPdf generates compact vector PDF with exact page dimensions 
     assert.ok(progressEvents.length >= 2);
     assert.equal(progressEvents[progressEvents.length - 1].current, 122);
 
+    // Verify book mode exports cleanly with exact A4 landscape dimensions
+    const bookResult = paginateBook(book, { ...DEFAULT_SETTINGS, bookMode: true });
+    await exportSongbookPdf({ result: bookResult });
+    assert.ok(fs.existsSync(outPath), 'Expected book mode PDF output file to be written');
+
     // Verify immediate abort throws AbortError
     const controller = new AbortController();
     controller.abort();

@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import {
-  KYTARIO_PALETTE, getColumnCount, getTypeScale,
+  KYTARIO_PALETTE, getColumnCount, getPageMargins, getTypeScale,
 } from './settings.js';
 
 const PX_TO_MM = 25.4 / 96;
@@ -449,7 +449,7 @@ function renderCoverPage(doc, {
 }
 
 function renderContentsPage(doc, {
-  page, book, settings, geometry, textHelper,
+  page, book, settings, geometry, pageMargins, textHelper,
 }) {
   const { widthMm, heightMm, heightPx } = geometry;
   fillPageTint(doc, widthMm, heightMm, settings.paperTint);
@@ -457,16 +457,20 @@ function renderContentsPage(doc, {
   const darkInk = [39, 39, 42];
   const titlePt = 15.4 * PX_TO_PT;
   const entryPt = 14 * PX_TO_PT;
-  const padMm = 20 * PX_TO_MM;
+  const defaultPadMm = 20 * PX_TO_MM;
+  const leftPad = settings.bookMode ? pageMargins.left : defaultPadMm;
+  const rightPad = settings.bookMode ? pageMargins.right : defaultPadMm;
+  const topPad = settings.bookMode ? Math.max(defaultPadMm, pageMargins.top) : defaultPadMm;
+  const availW = Math.max(20, widthMm - leftPad - rightPad);
   const titleH = 21 * PX_TO_MM;
   const rowH = 14 * PX_TO_MM;
 
-  const titleText = truncateText(textHelper.measure, 'bold', titlePt, book.name, widthMm - padMm * 2);
-  textHelper.draw('bold', titlePt, darkInk, titleText, widthMm / 2, padMm + titleH / 2, { align: 'center' });
+  const titleText = truncateText(textHelper.measure, 'bold', titlePt, book.name, availW);
+  textHelper.draw('bold', titlePt, darkInk, titleText, leftPad + availW / 2, topPad + titleH / 2, { align: 'center' });
 
-  const listW = Math.min(1010 * PX_TO_MM, widthMm - padMm * 2);
-  const listX = (widthMm - listW) / 2;
-  const listY = padMm + titleH;
+  const listW = Math.min(1010 * PX_TO_MM, availW);
+  const listX = leftPad + (availW - listW) / 2;
+  const listY = topPad + titleH;
   const colW = listW / 3;
   const rows = page.rows || Math.max(1, Math.floor(Math.min(672, heightPx - 63) / 14));
   const numW = 28 * PX_TO_MM;
@@ -487,11 +491,13 @@ function renderContentsPage(doc, {
 }
 
 function renderSongPage(doc, {
-  page, settings, geometry, textHelper,
+  page, settings, geometry, pageMargins, textHelper,
 }) {
   const {
-    widthMm, heightMm, marginTop, marginLeft, contentWidthMm, contentHeightMm,
+    widthMm, heightMm, contentWidthMm, contentHeightMm,
   } = geometry;
+  const marginTop = pageMargins.top;
+  const marginLeft = pageMargins.left;
   fillPageTint(doc, widthMm, heightMm, settings.paperTint);
 
   const columns = getColumnCount(settings, geometry);
@@ -540,11 +546,12 @@ function renderSongPage(doc, {
   doc.discardPath();
 
   // --- Song Header ---
+  const badgeRight = Boolean(settings.bookMode) && page.number % 2 === 1;
   const badgeSize = lyricMm * 1.7;
   const author = song.author || song.interpreter || null;
   const mainTitle = author ? `${song.name} - ${author}` : song.name;
   const keyText = settings.showMetadata && song.tonalKey ? `(${song.tonalKey})` : null;
-  const titleAvailW = Math.max(6, colW - badgeSize);
+  const titleAvailW = badgeRight && columns === 2 ? colW : Math.max(6, colW - badgeSize);
 
   const titleLines = wrapText(textHelper.measure, 'bold', headingPt, mainTitle, titleAvailW);
   if (titleLines.length === 0) titleLines.push('');
@@ -566,25 +573,28 @@ function renderSongPage(doc, {
   const titleLineH = headingMm * 1.6;
   const headerH = Math.max(badgeSize, titleLines.length * titleLineH);
 
-  // Badge
-  const badgeY = cy + (headerH - badgeSize) / 2;
+  // Badge (top-right of full page on odd pages in book mode; top-left otherwise)
+  const badgeX = badgeRight ? cx + cw - badgeSize : cx;
+  const badgeY = badgeRight && columns === 2 ? cy : cy + (headerH - badgeSize) / 2;
   const badgeRadius = 2 * PX_TO_MM;
   doc.setFillColor(badgeRgb[0], badgeRgb[1], badgeRgb[2]);
-  doc.roundedRect(cx, badgeY, badgeSize, badgeSize, badgeRadius, badgeRadius, 'F');
+  doc.roundedRect(badgeX, badgeY, badgeSize, badgeSize, badgeRadius, badgeRadius, 'F');
 
   textHelper.draw(
     'bold',
     badgePt,
     [255, 255, 255],
     String(song.bookNumber ?? page.songIndex + 1),
-    cx + badgeSize / 2,
+    badgeX + badgeSize / 2,
     badgeY + badgeSize / 2,
     { align: 'center' },
   );
 
   // Title lines
   const titleBlockTop = cy + (headerH - titleLines.length * titleLineH) / 2;
-  const titleCenterX = cx + badgeSize + titleAvailW / 2;
+  const titleCenterX = badgeRight
+    ? cx + titleAvailW / 2
+    : cx + badgeSize + titleAvailW / 2;
   for (let i = 0; i < titleLines.length; i += 1) {
     const lineY = titleBlockTop + i * titleLineH + titleLineH / 2;
     const isKeyOnlyLine = keyText && !keyOnLastLine && i === titleLines.length - 1;
@@ -927,17 +937,19 @@ export async function exportSongbookPdf({ result, onProgress, signal }) {
       doc.addPage([widthMm, heightMm], orientation);
     }
 
+    const pageMargins = getPageMargins(settings, page.number);
+
     if (page.type === 'cover') {
       renderCoverPage(doc, {
         book: songbook, settings, geometry, textHelper, qrDataUrl,
       });
     } else if (page.type === 'contents') {
       renderContentsPage(doc, {
-        page, book: songbook, settings, geometry, textHelper,
+        page, book: songbook, settings, geometry, pageMargins, textHelper,
       });
     } else {
       renderSongPage(doc, {
-        page, settings, geometry, textHelper,
+        page, settings, geometry, pageMargins, textHelper,
       });
     }
 

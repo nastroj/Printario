@@ -1,5 +1,5 @@
 import { FileText } from 'lucide-react';
-import { getColumnCount } from '../lib/settings.js';
+import { getColumnCount, getPageMargins } from '../lib/settings.js';
 import { SongPageContent } from './SongView.jsx';
 
 function CoverPage({ book, columns }) {
@@ -87,13 +87,15 @@ function ContentsPage({ page, book }) {
 
 export function PaperPage({ page, book, settings, geometry, className = '' }) {
   const columns = getColumnCount(settings, geometry);
+  const pageMargins = getPageMargins(settings, page.number);
+  const bookMode = Boolean(settings.bookMode);
   const style = {
     '--page-w': String(geometry.widthMm),
     '--page-h': String(geometry.heightMm),
-    '--margin-top': String(geometry.marginTop),
-    '--margin-right': String(geometry.marginRight),
-    '--margin-bottom': String(geometry.marginBottom),
-    '--margin-left': String(geometry.marginLeft),
+    '--margin-top': String(pageMargins.top),
+    '--margin-right': String(pageMargins.right),
+    '--margin-bottom': String(pageMargins.bottom),
+    '--margin-left': String(pageMargins.left),
     '--paper-tint': settings.paperTint,
     '--heading-color': settings.headingColor,
     '--lyrics-color': settings.lyricsColor,
@@ -107,7 +109,7 @@ export function PaperPage({ page, book, settings, geometry, className = '' }) {
 
   return (
     <article
-      className={`paper-page page-${page.type} ${className}`}
+      className={`paper-page page-${page.type}${bookMode ? ' is-book-mode' : ''} ${className}`.trim()}
       style={style}
       data-page-number={page.number}
       aria-label={`Page ${page.number}${page.type === 'song' ? ` — ${page.song.name}` : ''}`}

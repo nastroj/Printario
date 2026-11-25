@@ -16,7 +16,7 @@ function readCliFlag(name) {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const IS_PROD = process.env.NODE_ENV === 'production';
-const PORT = Number(readCliFlag('--port') || process.env.PORT || 5173);
+const PORT = Number(readCliFlag('--port') || process.env.PORT || 3000);
 const HOST = readCliFlag('--host') || process.env.HOST || '0.0.0.0';
 
 const app = express();
