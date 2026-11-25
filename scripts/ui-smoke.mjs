@@ -192,12 +192,36 @@ try {
   document.querySelector('.settings-toggle-button')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await waitFor('.settings-sheet-layer.is-open');
   if (document.querySelector('.preset-row')) throw new Error('Margin presets should not be rendered');
+  if (document.querySelector('.book-card')) throw new Error('Dark book card should not be rendered');
+  const marginTip = [...document.querySelectorAll('.settings-panel .control-note')]
+    .find((el) => el.textContent.includes('Margins → None'));
+  if (!marginTip) throw new Error('Print margin advice should be rendered in settings');
 
   const bookToggle = [...document.querySelectorAll('.toggle-row')]
     .find((row) => row.textContent.includes('Book mode'))
     ?.querySelector('button[role="switch"]');
   if (!bookToggle) throw new Error('Book mode toggle missing');
   bookToggle.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+  const sectionLineToggle = [...document.querySelectorAll('.toggle-row')]
+    .find((row) => row.textContent.includes('Section lines'))
+    ?.querySelector('button[role="switch"]');
+  if (!sectionLineToggle) throw new Error('Section lines toggle missing');
+  sectionLineToggle.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+  const beforeBtn = [...document.querySelectorAll('.segment')]
+    .find((button) => button.textContent.trim() === 'Before line');
+  if (!beforeBtn) throw new Error('Before line section label option missing');
+  beforeBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+  const footerCloseBtn = document.querySelector('.settings-foot-actions button[aria-label="Close settings"]');
+  if (!footerCloseBtn) throw new Error('Settings footer close button missing');
+  footerCloseBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  if (document.querySelector('.settings-sheet-layer.is-open')) {
+    throw new Error('Settings footer close button did not close settings');
+  }
+
   await new Promise((resolve) => setTimeout(resolve, 250));
   const marginLabels = [...document.querySelectorAll('.margin-grid .stepper-label')].map((el) => el.textContent.trim());
   if (!marginLabels.includes('Outer') || !marginLabels.includes('Inner')) {
@@ -238,6 +262,9 @@ try {
   if (!printedPageEls[2]?.querySelector('.song-sheet.is-badge-right')) {
     throw new Error('Page 3 (odd) should place song number badge on the right top corner');
   }
+  if (!printedPageEls[2]?.querySelector('.song-section.no-section-line.labels-before')) {
+    throw new Error('Song section should apply no-section-line and labels-before classes');
+  }
   if (printedPageEls[2]?.style.getPropertyValue('--margin-left') !== '12' || printedPageEls[2]?.style.getPropertyValue('--margin-right') !== '5') {
     throw new Error('Page 3 (odd) should place inner=12mm on left and outer=5mm on right');
   }
@@ -248,6 +275,33 @@ try {
     throw new Error('Page 5 (odd) should place song number badge on the right top corner');
   }
   await new Promise((resolve) => setTimeout(resolve, 250));
+
+  // Open the Export PDF dialog and verify Print shop (Pro) sheet preview + controls.
+  document.querySelector('.header-pdf')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await waitFor('.pdf-export-dialog');
+  const proBtn = [...document.querySelectorAll('.pdf-export-dialog .segment')]
+    .find((btn) => btn.textContent.includes('Print shop (Pro)'));
+  if (!proBtn) throw new Error('Print shop (Pro) mode option missing');
+  proBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await waitFor('.sheet-preview-svg');
+  const caption = document.querySelector('.sheet-preview-caption')?.textContent || '';
+  if (!caption.includes('A3') || !caption.includes('297')) {
+    throw new Error(`Expected A3 sheet preview caption, got: ${caption}`);
+  }
+  const crossStyleBtn = [...document.querySelectorAll('.crop-style-btn')]
+    .find((btn) => btn.textContent.includes('Hairline crosses'));
+  if (!crossStyleBtn) throw new Error('Hairline crosses crop mark style option missing');
+  crossStyleBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  if (!crossStyleBtn.classList.contains('is-active')) {
+    throw new Error('Hairline crosses crop mark style did not activate');
+  }
+  document.querySelector('.pdf-export-dialog button[aria-label="Close export dialog"]')
+    ?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  if (document.querySelector('.pdf-export-dialog')) {
+    throw new Error('PDF export dialog did not close');
+  }
 
   console.log(JSON.stringify({
     title,

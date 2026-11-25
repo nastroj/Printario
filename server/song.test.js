@@ -236,6 +236,33 @@ test('loadSettings migrates legacy v2 7mm default margins to 6/5/6/12mm', () => 
     assert.deepEqual(migrated.margins, { top: 6, right: 5, bottom: 6, left: 12 });
     assert.equal(migrated.fontFamily, 'lora');
     assert.equal(migrated.bookMode, false);
+    assert.equal(migrated.showSectionLines, true);
+    assert.equal(migrated.sectionLabelPosition, 'after');
+  } finally {
+    globalThis.localStorage = prevStorage;
+  }
+});
+
+test('section line and label position settings normalize cleanly', () => {
+  assert.equal(DEFAULT_SETTINGS.showSectionLines, true);
+  assert.equal(DEFAULT_SETTINGS.sectionLabelPosition, 'after');
+
+  const prevStorage = globalThis.localStorage;
+  const store = new Map([
+    ['printario.settings.v3', JSON.stringify({
+      showSectionLines: false,
+      sectionLabelPosition: 'before',
+    })],
+  ]);
+  globalThis.localStorage = {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => store.set(key, value),
+  };
+
+  try {
+    const loaded = loadSettings();
+    assert.equal(loaded.showSectionLines, false);
+    assert.equal(loaded.sectionLabelPosition, 'before');
   } finally {
     globalThis.localStorage = prevStorage;
   }

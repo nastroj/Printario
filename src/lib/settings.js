@@ -1,3 +1,5 @@
+import { DEFAULT_PDF_EXPORT, normalizePdfExportOptions } from './imposition.js';
+
 export const PAPER_SIZES = {
   A4: { label: 'A4', width: 210, height: 297, hint: '210 × 297 mm' },
   A5: { label: 'A5', width: 148, height: 210, hint: '148 × 210 mm' },
@@ -136,8 +138,11 @@ export const DEFAULT_SETTINGS = {
   cover: true,
   contents: true,
   showMetadata: true,
+  showSectionLines: true,
   showSectionLabels: true,
+  sectionLabelPosition: 'after',
   songOrder: 'title',
+  pdfExport: { ...DEFAULT_PDF_EXPORT },
 };
 
 /**
@@ -198,6 +203,10 @@ export function loadSettings() {
     delete merged.autoFitFill;
     delete merged.pageNumbers;
     merged.bookMode = Boolean(merged.bookMode);
+    merged.showSectionLines = merged.showSectionLines !== false;
+    if (!['before', 'after'].includes(merged.sectionLabelPosition)) {
+      merged.sectionLabelPosition = DEFAULT_SETTINGS.sectionLabelPosition;
+    }
     for (const side of ['top', 'right', 'bottom', 'left']) {
       const value = Number(merged.margins[side]);
       merged.margins[side] = Number.isFinite(value)
@@ -212,9 +221,10 @@ export function loadSettings() {
     if (!['manual', 'title', 'author'].includes(merged.songOrder)) {
       merged.songOrder = DEFAULT_SETTINGS.songOrder;
     }
+    merged.pdfExport = normalizePdfExportOptions(saved?.pdfExport);
     return merged;
   } catch {
-    return { ...DEFAULT_SETTINGS, margins: { ...DEFAULT_MARGINS } };
+    return { ...DEFAULT_SETTINGS, margins: { ...DEFAULT_MARGINS }, pdfExport: { ...DEFAULT_PDF_EXPORT } };
   }
 }
 

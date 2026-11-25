@@ -7,10 +7,12 @@ import { PreviewStage } from './components/PreviewStage.jsx';
 import { SettingsPanel } from './components/SettingsPanel.jsx';
 import { SongDrawer } from './components/SongDrawer.jsx';
 import { PdfProgressDialog } from './components/PdfProgressDialog.jsx';
+import { PdfExportDialog } from './components/PdfExportDialog.jsx';
 import { Brand } from './components/Brand.jsx';
 import { PaperPage } from './components/PaperPage.jsx';
 import { buildBookModel } from './lib/song.js';
 import { paginateBook } from './lib/paginate.js';
+import { buildSheetSequence } from './lib/imposition.js';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './lib/settings.js';
 import { addRecent, cacheSongbook, loadRecent, readCachedSongbook, removeRecent } from './lib/storage.js';
 
@@ -29,7 +31,9 @@ function getLayoutKey(settings) {
     cover: settings.cover,
     contents: settings.contents,
     showMetadata: settings.showMetadata,
+    showSectionLines: settings.showSectionLines !== false,
     showSectionLabels: settings.showSectionLabels,
+    sectionLabelPosition: settings.sectionLabelPosition ?? 'after',
     songOrder: settings.songOrder,
   });
 }
@@ -117,6 +121,7 @@ export default function App() {
   const [printMode, setPrintMode] = useState(false);
   const [toast, setToast] = useState(null);
   const [installPrompt, setInstallPrompt] = useState(null);
+  const [pdfExportOpen, setPdfExportOpen] = useState(false);
   const [pdfProgress, setPdfProgress] = useState(null);
   const pdfAbortRef = useRef(null);
 
@@ -272,16 +277,30 @@ export default function App() {
     setPrintMode(true);
   }, [result, settingsPending]);
 
-  const handleDownloadPdf = useCallback(async () => {
+  const handleOpenPdfExport = useCallback(() => {
     if (!result || settingsPending || pdfProgress) return;
+    setSettingsOpen(false);
+    setDrawerOpen(false);
+    setPdfExportOpen(true);
+  }, [result, settingsPending, pdfProgress]);
+
+  const handleDownloadPdf = useCallback(async (overridePdfOptions = null) => {
+    if (!result || settingsPending || pdfProgress) return;
+    const pdfOptions = overridePdfOptions ?? settings.pdfExport;
+    const total = pdfOptions?.mode === 'pro'
+      ? buildSheetSequence(result.pageCount, pdfOptions).length
+      : result.pageCount;
+
+    setPdfExportOpen(false);
     const controller = new AbortController();
     pdfAbortRef.current = controller;
-    setPdfProgress({ current: 0, total: result.pageCount, pageName: 'Starting…' });
+    setPdfProgress({ current: 0, total, pageName: 'Starting…' });
 
     try {
       const { exportSongbookPdf } = await import('./lib/pdf.js');
       const filename = await exportSongbookPdf({
         result,
+        pdfOptions,
         onProgress: (p) => setPdfProgress(p),
         signal: controller.signal,
       });
@@ -297,7 +316,7 @@ export default function App() {
       setPdfProgress(null);
       pdfAbortRef.current = null;
     }
-  }, [result, settingsPending, pdfProgress, showToast]);
+  }, [result, settingsPending, pdfProgress, settings.pdfExport, showToast]);
 
   const handleCancelDownloadPdf = useCallback(() => {
     if (pdfAbortRef.current) {
@@ -417,6 +436,7 @@ export default function App() {
       pdfAbortRef.current.abort();
     }
     setPdfProgress(null);
+    setPdfExportOpen(false);
     setSourceData(null);
     setResult(null);
     setCurrentPage(0);
@@ -480,7 +500,7 @@ export default function App() {
             }}
             settingsOpen={settingsOpen}
             onPrint={handlePrint}
-            onDownloadPdf={handleDownloadPdf}
+            onDownloadPdf={handleOpenPdfExport}
             pdfGenerating={Boolean(pdfProgress)}
             reflowing={settingsPending}
           />
@@ -516,22 +536,11 @@ export default function App() {
             update={updateSetting}
             setMargin={updateMargins}
             onReset={resetSettings}
-            onResetBook={() => {
-              setSettingsOpen(false);
-              newBook();
-            }}
-            onOpenContents={() => {
-              setSettingsOpen(false);
-              setDrawerOpen(true);
-            }}
             onPrint={() => {
               setSettingsOpen(false);
               handlePrint();
             }}
-            onDownloadPdf={() => {
-              setSettingsOpen(false);
-              handleDownloadPdf();
-            }}
+            onDownloadPdf={handleOpenPdfExport}
             pdfGenerating={Boolean(pdfProgress)}
             onClose={() => setSettingsOpen(false)}
           />
@@ -540,6 +549,14 @@ export default function App() {
         <Toast toast={toast} onClose={() => setToast(null)} />
       </div>
       {printMode && result && <PrintRoot result={result} settings={result.settings} />}
+      <PdfExportDialog
+        isOpen={pdfExportOpen}
+        result={result}
+        settings={settings}
+        onChangePdfOptions={(nextOpts) => updateSetting('pdfExport', nextOpts)}
+        onExport={handleDownloadPdf}
+        onClose={() => setPdfExportOpen(false)}
+      />
       <PdfProgressDialog
         progress={pdfProgress}
         onCancel={handleCancelDownloadPdf}

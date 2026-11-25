@@ -139,14 +139,19 @@ function InlineLine({ line }) {
 
 function SongSection({ section, settings, hideExpandableChords }) {
   const hideChords = section.expandable && hideExpandableChords;
+  const showLines = settings.showSectionLines !== false;
+  const labelBefore = (settings.sectionLabelPosition ?? 'after') === 'before';
   const showLabel = settings.showSectionLabels && Boolean(section.title);
+  const firstHasChordRow = !hideChords && section.lines[0]?.kind !== 'inline';
   const chorus = CHORUS_TITLE_RE.test(section.title);
   const className = [
     'song-section',
     section.unnamed ? 'is-instrumental' : '',
     chorus ? 'is-chorus' : '',
     section.hasChords ? 'has-chords' : '',
-    !hideChords ? 'has-chord-row' : '',
+    firstHasChordRow ? 'has-chord-row' : '',
+    showLines ? 'has-section-line' : 'no-section-line',
+    labelBefore ? 'labels-before' : 'labels-after',
     showLabel ? 'has-label' : 'no-label',
     hideChords ? 'chords-hidden' : '',
   ].filter(Boolean).join(' ');

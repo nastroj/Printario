@@ -1,6 +1,5 @@
 import {
-  ArrowUpRight, BookOpen, Download, FileText, LayoutList, ListMusic,
-  Palette, Printer, RotateCcw, Type, X,
+  Download, FileText, LayoutList, Palette, Printer, RotateCcw, Type, X,
 } from 'lucide-react';
 import {
   COLOR_PRESETS, FONT_STACKS, KYTARIO_PALETTE, PAPER_SIZES, PAPER_TINTS,
@@ -12,33 +11,8 @@ import {
   StepperControl, Toggle,
 } from './Controls.jsx';
 
-function SongbookCard({ book, onResetBook, onOpenContents }) {
-  return (
-    <div className="book-card">
-      <div className="book-card-top">
-        <span className="book-card-icon"><BookOpen size={19} /></span>
-        <div className="book-card-titles">
-          <span className="book-card-kicker">Now typesetting</span>
-          <h2>{book.name}</h2>
-          <p>{book.songs.length} songs{book.projectName ? ` · ${book.projectName}` : ''}</p>
-        </div>
-      </div>
-      <div className="book-card-actions">
-        <button type="button" className="soft-button" onClick={onOpenContents}><ListMusic size={15} /> Contents</button>
-        <button type="button" className="soft-button" onClick={onResetBook}><RotateCcw size={15} /> Change</button>
-      </div>
-      <a className="book-source" href={book.sourceUrl} target="_blank" rel="noreferrer">
-        Open source on Kytario <ArrowUpRight size={12} />
-      </a>
-      <p className="book-print-tip">
-        In the print dialog: <strong>Margins → None</strong>, browser headers off.
-      </p>
-    </div>
-  );
-}
-
 export function SettingsPanel({
-  book, settings, update, setMargin, onReset, onResetBook, onOpenContents, onPrint,
+  book, settings, update, setMargin, onReset, onPrint,
   onDownloadPdf, pdfGenerating, onClose,
 }) {
   const geometry = PAPER_SIZES[settings.paper];
@@ -52,7 +26,7 @@ export function SettingsPanel({
       <div className="sheet-handle" aria-hidden="true" />
       <div className="settings-sheet-head">
         <div>
-          <span className="settings-sheet-kicker">{book.name}</span>
+          <span className="settings-sheet-kicker">{book.name} · {book.songs.length} songs</span>
           <h2>Print settings</h2>
         </div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close settings">
@@ -60,11 +34,6 @@ export function SettingsPanel({
         </button>
       </div>
       <div className="settings-scroll">
-        <SongbookCard
-          book={book}
-          onResetBook={onResetBook}
-          onOpenContents={onOpenContents}
-        />
 
         <PanelSection icon={FileText} title="Page setup">
           <span className="control-label"><span>Paper size</span><span className="control-value">{geometry.hint}</span></span>
@@ -135,6 +104,9 @@ export function SettingsPanel({
               />
             ))}
           </div>
+          <p className="control-note">
+            In the print dialog: <strong>Margins → None</strong>, browser headers off.
+          </p>
 
         </PanelSection>
 
@@ -314,8 +286,20 @@ export function SettingsPanel({
             <Toggle label="Cover page" hint="A title page with the book name and songbook link." checked={settings.cover} onChange={(v) => update('cover', v)} />
             <Toggle label="Table of contents" hint="A three-column song list before the songs." checked={settings.contents} onChange={(v) => update('contents', v)} />
             <Toggle label="Song details" hint="Song key beside the title." checked={settings.showMetadata} onChange={(v) => update('showMetadata', v)} />
-            <Toggle label="Section labels" hint="Verse and chorus names in the left gutter." checked={settings.showSectionLabels} onChange={(v) => update('showSectionLabels', v)} />
+            <Toggle label="Section lines" hint="Vertical line beside each verse and chorus." checked={settings.showSectionLines !== false} onChange={(v) => update('showSectionLines', v)} />
+            <Toggle label="Section labels" hint="Verse and chorus names beside the first line." checked={settings.showSectionLabels} onChange={(v) => update('showSectionLabels', v)} />
           </div>
+          <span className="control-label spaced"><span>Section label position</span></span>
+          <Segmented
+            value={settings.sectionLabelPosition ?? 'after'}
+            columns={2}
+            ariaLabel="Section label position"
+            onChange={(value) => update('sectionLabelPosition', value)}
+            options={[
+              { value: 'before', label: 'Before line', hint: 'On the left of section lines' },
+              { value: 'after', label: 'After line', hint: 'On the right of section lines' },
+            ]}
+          />
           <SelectControl
             label="Table of contents order"
             value={settings.songOrder}
@@ -351,6 +335,14 @@ export function SettingsPanel({
           disabled={pdfGenerating}
         >
           <Printer size={16} /> Print
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          onClick={onClose}
+          aria-label="Close settings"
+        >
+          <X size={18} />
         </button>
       </div>
     </aside>

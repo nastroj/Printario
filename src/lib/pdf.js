@@ -2,6 +2,9 @@ import { jsPDF } from 'jspdf';
 import {
   KYTARIO_PALETTE, getColumnCount, getPageMargins, getTypeScale,
 } from './settings.js';
+import {
+  buildSheetSequence, computeSheetLayout, normalizePdfExportOptions,
+} from './imposition.js';
 
 const PX_TO_MM = 25.4 / 96;
 const PX_TO_PT = 0.75;
@@ -43,14 +46,25 @@ const fontBase64Cache = new Map();
 /**
  * Generates a clean, filesystem-safe filename for the exported PDF.
  */
-export function getPdfFilename(songbook) {
+export function getPdfFilename(songbook, rawPdfOptions = null) {
   const raw = typeof songbook === 'string' ? songbook : songbook?.name;
   const cleaned = (raw || 'kytario-songbook')
     .normalize('NFKD')
     .replace(/[^\w\s-]/g, '')
     .trim()
     .replace(/\s+/g, '_');
-  return `${cleaned || 'kytario-songbook'}.pdf`;
+  const base = cleaned || 'kytario-songbook';
+  if (rawPdfOptions && rawPdfOptions.mode === 'pro') {
+    const opts = normalizePdfExportOptions(rawPdfOptions);
+    const sheetTag = opts.sheetSize === 'A3Plus' ? 'A3plus' : opts.sheetSize;
+    const layoutTag = opts.imposition === 'booklet'
+      ? 'booklet'
+      : opts.imposition === 'copies'
+        ? `${opts.pagesPerSheet}x_copies`
+        : `${opts.pagesPerSheet}up`;
+    return `${base}_${sheetTag}_${layoutTag}.pdf`;
+  }
+  return `${base}.pdf`;
 }
 
 /**
@@ -621,11 +635,13 @@ function renderSongPage(doc, {
   }
 
   // --- Sections ---
-  const borderL = 0.2 * lyricMm;
+  const showLines = settings.showSectionLines !== false;
+  const labelBefore = (settings.sectionLabelPosition ?? 'after') === 'before';
+  const borderL = showLines ? 0.2 * lyricMm : 0;
   const borderT = 0.1 * lyricMm;
   const borderB = 0.1 * lyricMm;
   const borderR = 0.1 * lyricMm;
-  const padL = 0.2 * lyricMm;
+  const padL = showLines ? (labelBefore ? 0.35 : 0.2) * lyricMm : 0;
   const labelW = settings.showSectionLabels ? 2.4 * labelMm : 0;
   const labelPadR = 0.25 * labelMm;
   const linesPadR = 0.6 * lyricMm;
@@ -659,17 +675,32 @@ function renderSongPage(doc, {
     const secX = cx + col * colW;
     const secY = cy + curY + marginTop;
 
-    const barRgb = isChorus ? chorusRgb : ruleRgb;
-    doc.setFillColor(barRgb[0], barRgb[1], barRgb[2]);
-    doc.rect(secX, secY, borderL, sectionBoxH, 'F');
-
-    if (showLabel) {
-      const labelX = secX + borderL + padL + labelW - labelPadR;
-      const labelY = secY + borderT + (showChords ? chordRowH : 0) + lyricRowH / 2;
-      textHelper.draw('normal', labelPt, lyricsRgb, section.title, labelX, labelY, { align: 'right' });
+    if (showLines) {
+      const barRgb = isChorus ? chorusRgb : ruleRgb;
+      const barX = labelBefore ? secX + labelW : secX;
+      doc.setFillColor(barRgb[0], barRgb[1], barRgb[2]);
+      doc.rect(barX, secY, borderL, sectionBoxH, 'F');
     }
 
-    const linesX = secX + borderL + padL + labelW;
+    if (showLabel) {
+      const firstLine = section.lines[0];
+      const firstIsInline = firstLine?.kind === 'inline';
+      const firstLineMidY = firstIsInline
+        ? secY + borderT + (lyricMm * 1.2) / 2
+        : secY + borderT + (showChords ? chordRowH : 0) + lyricRowH / 2;
+      const labelBaselineY = firstLineMidY + 0.35 * (lyricPt * (25.4 / 72));
+      const labelX = labelBefore
+        ? secX + labelW - labelPadR
+        : secX + borderL + padL + labelW - labelPadR;
+      textHelper.draw('normal', labelPt, lyricsRgb, section.title, labelX, labelBaselineY, {
+        align: 'right',
+        baseline: 'alphabetic',
+      });
+    }
+
+    const linesX = labelBefore
+      ? secX + labelW + borderL + padL
+      : secX + borderL + padL + labelW;
     let lineY = secY + borderT;
 
     for (const line of section.lines) {
@@ -884,11 +915,253 @@ function throwIfAborted(signal) {
   }
 }
 
+function createSlotMatrix(doc, {
+  sheetHeightMm, slot, pageHeightMm, scale, rotated,
+}) {
+  const k = doc.internal.scaleFactor;
+  const H = sheetHeightMm * k;
+  const s = scale;
+  if (!rotated) {
+    return doc.Matrix(
+      s,
+      0,
+      0,
+      s,
+      slot.xMm * k,
+      H * (1 - s) - slot.yMm * k,
+    );
+  }
+  // 90 deg CW rotation: (x, y) -> (slot.xMm + s * (pageHeightMm - y), slot.yMm + s * x)
+  return doc.Matrix(
+    0,
+    -s,
+    s,
+    0,
+    (slot.xMm + s * pageHeightMm) * k - s * H,
+    H - slot.yMm * k,
+  );
+}
+
+function drawPrepressMarks(doc, {
+  layout, pdfOpts, sheetIndex, totalSheets, slotEntries, book, settings, textHelper,
+}) {
+  const {
+    sheetWidthMm, sheetHeightMm, cols, rows, gapMm, bleedMm, slots,
+    marginXMm, marginYMm,
+  } = layout;
+  const hairlineMm = 0.25 * (25.4 / 72);
+  const offsetMm = bleedMm > 0 ? bleedMm + 1.5 : 2.5;
+  const maxMarkLen = 6;
+
+  doc.saveGraphicsState();
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(hairlineMm);
+  doc.setLineCap('butt');
+  doc.setLineDashPattern([], 0);
+
+  // 1. Corner crop / trim marks for each slot
+  if (pdfOpts.cropMarks) {
+    const style = pdfOpts.cropMarkStyle ?? 'standard';
+    if (style === 'dashed') {
+      doc.setLineDashPattern([1.2, 0.9], 0);
+    }
+
+    for (const slot of slots) {
+      const leftAvail = slot.col === 0 ? slot.xMm : gapMm / 2;
+      const rightAvail = slot.col === cols - 1 ? sheetWidthMm - (slot.xMm + slot.widthMm) : gapMm / 2;
+      const topAvail = slot.row === 0 ? slot.yMm : gapMm / 2;
+      const bottomAvail = slot.row === rows - 1 ? sheetHeightMm - (slot.yMm + slot.heightMm) : gapMm / 2;
+
+      const corners = [
+        [slot.xMm, slot.yMm, -1, -1, leftAvail, topAvail],
+        [slot.xMm + slot.widthMm, slot.yMm, 1, -1, rightAvail, topAvail],
+        [slot.xMm, slot.yMm + slot.heightMm, -1, 1, leftAvail, bottomAvail],
+        [slot.xMm + slot.widthMm, slot.yMm + slot.heightMm, 1, 1, rightAvail, bottomAvail],
+      ];
+
+      for (const [cx, cy, dx, dy, availX, availY] of corners) {
+        if (style === 'cross') {
+          const innerX = Math.min(2.2, slot.widthMm * 0.08);
+          const innerY = Math.min(2.2, slot.heightMm * 0.08);
+          const outerX = availX >= 1.5 ? Math.min(offsetMm + maxMarkLen, availX - 0.3) : 0;
+          const outerY = availY >= 1.5 ? Math.min(offsetMm + maxMarkLen, availY - 0.3) : 0;
+          doc.line(cx - dx * innerX, cy, cx + dx * outerX, cy);
+          doc.line(cx, cy - dy * innerY, cx, cy + dy * outerY);
+        } else if (style === 'double') {
+          const sep = Math.min(2.8, Math.max(1.8, bleedMm || 2.5));
+          if (availX >= 2) {
+            const start = Math.min(offsetMm, availX * 0.35);
+            const end = Math.min(offsetMm + maxMarkLen, Math.max(start + 1.5, availX - 0.4));
+            doc.line(cx + dx * start, cy, cx + dx * end, cy);
+            if (availY >= sep + 1.5) {
+              const outerEnd = Math.min(end, Math.max(start + 1.5, availX - 0.4));
+              doc.line(cx + dx * start, cy + dy * sep, cx + dx * outerEnd, cy + dy * sep);
+            }
+          }
+          if (availY >= 2) {
+            const start = Math.min(offsetMm, availY * 0.35);
+            const end = Math.min(offsetMm + maxMarkLen, Math.max(start + 1.5, availY - 0.4));
+            doc.line(cx, cy + dy * start, cx, cy + dy * end);
+            if (availX >= sep + 1.5) {
+              const outerEnd = Math.min(end, Math.max(start + 1.5, availY - 0.4));
+              doc.line(cx + dx * sep, cy + dy * start, cx + dx * sep, cy + dy * outerEnd);
+            }
+          }
+        } else {
+          if (availX >= 2) {
+            const start = Math.min(offsetMm, availX * 0.35);
+            const end = Math.min(offsetMm + maxMarkLen, Math.max(start + 1.5, availX - 0.4));
+            doc.line(cx + dx * start, cy, cx + dx * end, cy);
+          }
+          if (availY >= 2) {
+            const start = Math.min(offsetMm, availY * 0.35);
+            const end = Math.min(offsetMm + maxMarkLen, Math.max(start + 1.5, availY - 0.4));
+            doc.line(cx, cy + dy * start, cx, cy + dy * end);
+          }
+        }
+      }
+    }
+
+    if (style === 'dashed') {
+      doc.setLineDashPattern([], 0);
+    }
+  }
+
+  // 2. Center fold / shared seam cut marks
+  if (pdfOpts.centerMarks || (pdfOpts.cropMarks && gapMm === 0 && (cols > 1 || rows > 1))) {
+    const isBooklet = pdfOpts.imposition === 'booklet';
+    if (isBooklet) {
+      doc.setLineDashPattern([1.4, 1.1], 0);
+    }
+
+    const firstSlot = slots[0];
+    if (cols > 1 && firstSlot) {
+      for (let c = 1; c < cols; c += 1) {
+        const prevRight = marginXMm + (c - 1) * (firstSlot.widthMm + gapMm) + firstSlot.widthMm;
+        const seamX = prevRight + gapMm / 2;
+        if (marginYMm >= 2) {
+          const start = Math.min(offsetMm, marginYMm * 0.35);
+          const end = Math.min(offsetMm + maxMarkLen, Math.max(start + 1.5, marginYMm - 0.4));
+          doc.line(seamX, marginYMm - start, seamX, marginYMm - end);
+          doc.line(seamX, sheetHeightMm - marginYMm + start, seamX, sheetHeightMm - marginYMm + end);
+        } else {
+          // Edge-to-edge sheet: draw short inward seam ticks so cut/fold line is visible
+          doc.line(seamX, 0, seamX, 3.5);
+          doc.line(seamX, sheetHeightMm - 3.5, seamX, sheetHeightMm);
+        }
+        if (!isBooklet && pdfOpts.centerMarks && gapMm >= 4) {
+          const midY = sheetHeightMm / 2;
+          doc.line(seamX - 1.5, midY, seamX + 1.5, midY);
+          doc.line(seamX, midY - 2.5, seamX, midY + 2.5);
+        }
+      }
+    }
+
+    if (rows > 1 && firstSlot) {
+      for (let r = 1; r < rows; r += 1) {
+        const prevBottom = marginYMm + (r - 1) * (firstSlot.heightMm + gapMm) + firstSlot.heightMm;
+        const seamY = prevBottom + gapMm / 2;
+        if (marginXMm >= 2) {
+          const start = Math.min(offsetMm, marginXMm * 0.35);
+          const end = Math.min(offsetMm + maxMarkLen, Math.max(start + 1.5, marginXMm - 0.4));
+          doc.line(marginXMm - start, seamY, marginXMm - end, seamY);
+          doc.line(sheetWidthMm - marginXMm + start, seamY, sheetWidthMm - marginXMm + end, seamY);
+        } else {
+          doc.line(0, seamY, 3.5, seamY);
+          doc.line(sheetWidthMm - 3.5, seamY, sheetWidthMm, seamY);
+        }
+        if (!isBooklet && pdfOpts.centerMarks && gapMm >= 4) {
+          const midX = sheetWidthMm / 2;
+          doc.line(midX - 2.5, seamY, midX + 2.5, seamY);
+          doc.line(midX, seamY - 1.5, midX, seamY + 1.5);
+        }
+      }
+    }
+
+    if (isBooklet) {
+      doc.setLineDashPattern([], 0);
+    }
+  }
+
+  // 3. Registration targets (outside trim area when margin >= 6.5 mm)
+  if (pdfOpts.registrationMarks) {
+    const drawTarget = (cx, cy) => {
+      const radius = 1.5;
+      const arm = 2.6;
+      doc.circle(cx, cy, radius, 'S');
+      doc.line(cx - arm, cy, cx + arm, cy);
+      doc.line(cx, cy - arm, cx, cy + arm);
+      doc.setFillColor(0, 0, 0);
+      doc.circle(cx, cy, 0.35, 'F');
+    };
+
+    if (marginYMm >= 6.5) {
+      const regX = cols % 2 === 0 ? sheetWidthMm * 0.25 : sheetWidthMm / 2;
+      const topCy = Math.max(3.2, marginYMm - 4.2);
+      drawTarget(regX, topCy);
+      if (!pdfOpts.slugInfo) {
+        drawTarget(regX, sheetHeightMm - topCy);
+      }
+    }
+    if (marginXMm >= 6.5) {
+      const regY = rows % 2 === 0 ? sheetHeightMm * 0.25 : sheetHeightMm / 2;
+      const leftCx = Math.max(3.2, marginXMm - 4.2);
+      drawTarget(leftCx, regY);
+      drawTarget(sheetWidthMm - leftCx, regY);
+    }
+  }
+
+  // 4. Sheet slug info & color calibration bar (bottom margin when >= 5.5 mm)
+  if (pdfOpts.slugInfo && marginYMm >= 5.5 && textHelper) {
+    const slugY = sheetHeightMm - Math.max(2.4, Math.min(4.2, (marginYMm - bleedMm) / 2));
+    const leftX = Math.max(4, marginXMm);
+    const rightX = sheetWidthMm - Math.max(4, marginXMm);
+    const pagesDesc = slotEntries
+      .map((entry) => (entry.displayNumber != null ? `P.${entry.displayNumber}` : 'Blank'))
+      .join(' / ');
+    const scalePct = Math.round(layout.scale * 1000) / 10;
+    const trimW = Number(layout.pageWidthMm.toFixed(1));
+    const trimH = Number(layout.pageHeightMm.toFixed(1));
+    const slugText = `${book?.name || 'Songbook'}  |  Sheet ${sheetIndex + 1}/${totalSheets}  |  ${pagesDesc}  |  Trim ${trimW}x${trimH} mm (${scalePct}%)`;
+
+    const swatches = [
+      [0, 0, 0],
+      [128, 128, 128],
+      [0, 174, 239],
+      [236, 0, 140],
+      [255, 242, 0],
+      parseHexRgb(settings?.headingColor, [17, 24, 39]),
+      parseHexRgb(settings?.chordsColor, [30, 64, 175]),
+    ];
+    const sq = 2.2;
+    const sqGap = 0.7;
+    const stripW = swatches.length * sq + (swatches.length - 1) * sqGap;
+    const maxSlugW = Math.max(30, rightX - leftX - stripW - 6);
+    const trimmedSlug = truncateText(textHelper.measure, 'normal', 5.8, slugText, maxSlugW);
+
+    textHelper.draw('normal', 5.8, [65, 72, 65], trimmedSlug, leftX, slugY, { align: 'left' });
+
+    if (rightX - leftX > stripW + 25) {
+      let sx = rightX - stripW;
+      const sy = slugY - sq / 2;
+      for (const rgb of swatches) {
+        doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+        doc.rect(sx, sy, sq, sq, 'F');
+        sx += sq + sqGap;
+      }
+    }
+  }
+
+  doc.restoreGraphicsState();
+}
+
 /**
  * Exports all pages in the songbook as a compact, vector PDF file
- * with exact page dimensions and zero DOM rendering.
+ * with exact page dimensions (or professional N-up / booklet press sheets with crop marks).
  */
-export async function exportSongbookPdf({ result, onProgress, signal }) {
+export async function exportSongbookPdf({
+  result, pdfOptions = null, onProgress, signal,
+}) {
   if (!result || !result.pages || result.pages.length === 0) {
     throw new Error('No pages to export');
   }
@@ -896,10 +1169,19 @@ export async function exportSongbookPdf({ result, onProgress, signal }) {
   throwIfAborted(signal);
 
   const { pages, geometry, songbook, settings } = result;
-  const orientation = geometry.widthMm > geometry.heightMm ? 'landscape' : 'portrait';
-  const { widthMm, heightMm } = geometry;
+  const resolvedPdfOpts = normalizePdfExportOptions(pdfOptions ?? settings?.pdfExport);
+  const isPro = resolvedPdfOpts.mode === 'pro';
 
-  const doc = createPdfDocument({ geometry });
+  const layout = isPro
+    ? computeSheetLayout(geometry.widthMm, geometry.heightMm, resolvedPdfOpts)
+    : null;
+  const docWidthMm = isPro ? layout.sheetWidthMm : geometry.widthMm;
+  const docHeightMm = isPro ? layout.sheetHeightMm : geometry.heightMm;
+  const orientation = docWidthMm > docHeightMm ? 'landscape' : 'portrait';
+
+  const doc = createPdfDocument({
+    geometry: { widthMm: docWidthMm, heightMm: docHeightMm },
+  });
 
   const [{ fontName, cmap }, qrDataUrl] = await Promise.all([
     setupPdfFonts(doc, settings.fontFamily, signal),
@@ -910,35 +1192,8 @@ export async function exportSongbookPdf({ result, onProgress, signal }) {
 
   const textHelper = createTextHelper(doc, fontName, cmap);
 
-  let lastProgressAt = 0;
-  let lastYieldAt = performance.now();
-
-  for (let i = 0; i < pages.length; i += 1) {
-    throwIfAborted(signal);
-
-    const page = pages[i];
-    const pageName = page.type === 'cover'
-      ? 'Cover'
-      : page.type === 'contents'
-        ? 'Table of Contents'
-        : page.song?.name || `Page ${page.number}`;
-
-    const now = performance.now();
-    if (i === 0 || i === pages.length - 1 || now - lastProgressAt >= 45) {
-      lastProgressAt = now;
-      onProgress?.({
-        current: i + 1,
-        total: pages.length,
-        pageName,
-      });
-    }
-
-    if (i > 0) {
-      doc.addPage([widthMm, heightMm], orientation);
-    }
-
+  const renderSinglePageContent = (page) => {
     const pageMargins = getPageMargins(settings, page.number);
-
     if (page.type === 'cover') {
       renderCoverPage(doc, {
         book: songbook, settings, geometry, textHelper, qrDataUrl,
@@ -952,16 +1207,140 @@ export async function exportSongbookPdf({ result, onProgress, signal }) {
         page, settings, geometry, pageMargins, textHelper,
       });
     }
+  };
 
-    if (performance.now() - lastYieldAt >= 16) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      lastYieldAt = performance.now();
+  let lastProgressAt = 0;
+  let lastYieldAt = performance.now();
+
+  if (!isPro) {
+    for (let i = 0; i < pages.length; i += 1) {
+      throwIfAborted(signal);
+
+      const page = pages[i];
+      const pageName = page.type === 'cover'
+        ? 'Cover'
+        : page.type === 'contents'
+          ? 'Table of Contents'
+          : page.song?.name || `Page ${page.number}`;
+
+      const now = performance.now();
+      if (i === 0 || i === pages.length - 1 || now - lastProgressAt >= 45) {
+        lastProgressAt = now;
+        onProgress?.({
+          current: i + 1,
+          total: pages.length,
+          pageName,
+        });
+      }
+
+      if (i > 0) {
+        doc.addPage([docWidthMm, docHeightMm], orientation);
+      }
+
+      renderSinglePageContent(page);
+
+      if (performance.now() - lastYieldAt >= 16) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        lastYieldAt = performance.now();
+      }
+    }
+  } else {
+    const sheets = buildSheetSequence(pages.length, resolvedPdfOpts);
+    const bleed = resolvedPdfOpts.bleedMm;
+
+    for (let sIdx = 0; sIdx < sheets.length; sIdx += 1) {
+      throwIfAborted(signal);
+
+      const slotEntries = sheets[sIdx];
+      const sheetPagesLabel = slotEntries
+        .filter((entry) => entry.displayNumber != null)
+        .map((entry) => `P.${entry.displayNumber}`)
+        .join(', ');
+
+      const now = performance.now();
+      if (sIdx === 0 || sIdx === sheets.length - 1 || now - lastProgressAt >= 45) {
+        lastProgressAt = now;
+        onProgress?.({
+          current: sIdx + 1,
+          total: sheets.length,
+          pageName: `Sheet ${sIdx + 1}${sheetPagesLabel ? ` (${sheetPagesLabel})` : ''}`,
+        });
+      }
+
+      if (sIdx > 0) {
+        doc.addPage([docWidthMm, docHeightMm], orientation);
+      }
+
+      for (let slotIdx = 0; slotIdx < layout.slots.length; slotIdx += 1) {
+        const slot = layout.slots[slotIdx];
+        const entry = slotEntries[slotIdx];
+        if (!entry || entry.pageIndex == null) continue;
+        const page = pages[entry.pageIndex];
+        if (!page) continue;
+
+        const leftBleed = slot.col === 0 ? bleed : Math.min(bleed, layout.gapMm / 2);
+        const rightBleed = slot.col === layout.cols - 1 ? bleed : Math.min(bleed, layout.gapMm / 2);
+        const topBleed = slot.row === 0 ? bleed : Math.min(bleed, layout.gapMm / 2);
+        const bottomBleed = slot.row === layout.rows - 1 ? bleed : Math.min(bleed, layout.gapMm / 2);
+
+        doc.saveGraphicsState();
+        doc.rect(
+          slot.xMm - leftBleed,
+          slot.yMm - topBleed,
+          slot.widthMm + leftBleed + rightBleed,
+          slot.heightMm + topBleed + bottomBleed,
+          null,
+        );
+        doc.clip();
+        doc.discardPath();
+
+        const matrix = createSlotMatrix(doc, {
+          sheetHeightMm: docHeightMm,
+          slot,
+          pageHeightMm: geometry.heightMm,
+          scale: layout.scale,
+          rotated: layout.rotated,
+        });
+        doc.setCurrentTransformationMatrix(matrix);
+
+        if (bleed > 0 && !isPureWhite(settings.paperTint)) {
+          const [r, g, b] = parseHexRgb(settings.paperTint, [255, 255, 255]);
+          const bleedLocal = bleed / layout.scale;
+          doc.setFillColor(r, g, b);
+          doc.rect(
+            -bleedLocal,
+            -bleedLocal,
+            geometry.widthMm + bleedLocal * 2,
+            geometry.heightMm + bleedLocal * 2,
+            'F',
+          );
+        }
+
+        renderSinglePageContent(page);
+        doc.restoreGraphicsState();
+      }
+
+      drawPrepressMarks(doc, {
+        layout,
+        pdfOpts: resolvedPdfOpts,
+        sheetIndex: sIdx,
+        totalSheets: sheets.length,
+        slotEntries,
+        book: songbook,
+        settings,
+        textHelper,
+      });
+
+      if (performance.now() - lastYieldAt >= 16) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        lastYieldAt = performance.now();
+      }
     }
   }
 
   throwIfAborted(signal);
 
-  const filename = getPdfFilename(songbook);
+  const filename = getPdfFilename(songbook, resolvedPdfOpts);
   doc.save(filename);
   return filename;
 }
