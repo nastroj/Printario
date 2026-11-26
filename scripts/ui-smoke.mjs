@@ -276,10 +276,11 @@ try {
     throw new Error(`Expected Outer/Inner margin labels in Book mode, got: ${marginLabels.join(', ')}`);
   }
 
-  const paperButtons = [...document.querySelectorAll('.segment')];
-  const a5 = paperButtons.find((button) => button.textContent.trim() === 'A5');
-  if (!a5) throw new Error('A5 paper option missing');
-  a5.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  const paperSelect = document.querySelector('select[aria-label="Paper size"]');
+  if (!paperSelect) throw new Error('Paper size select missing');
+  const selectSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  selectSetter.call(paperSelect, 'A5');
+  paperSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
   const reflowDeadline = Date.now() + 12000;
   while (Date.now() < reflowDeadline) {
     const page = document.querySelector('.paper-page');
@@ -343,6 +344,13 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 40));
   if (!crossStyleBtn.classList.contains('is-active')) {
     throw new Error('Hairline crosses crop mark style did not activate');
+  }
+  if (document.querySelector('.pdf-export-head .settings-sheet-kicker')) {
+    throw new Error('PDF export header should not render songbook kicker');
+  }
+  const summaryLine = document.querySelector('.pdf-export-summary-line')?.textContent || '';
+  if (!summaryLine.includes('Songs for the Slow Road') || !summaryLine.includes('5 pages') || !summaryLine.includes('sheets')) {
+    throw new Error(`Expected songbook name, pages, and sheets in pdf-export-summary-line, got: ${summaryLine}`);
   }
   if (document.querySelector('.pdf-export-dialog .confirm-cancel-btn')) {
     throw new Error('PDF export modal should not render a Cancel button');

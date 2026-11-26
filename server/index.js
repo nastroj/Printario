@@ -24,71 +24,18 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(compression());
 app.use(express.json({ limit: '16kb' }));
-
-// ---------------------------------------------------------------------------
-// Minimal structured logging (JSON lines in production, human-readable in dev)
-// so import latency and cache hit rates can be aggregated by any log shipper.
-// ---------------------------------------------------------------------------
-const log = IS_PROD
-  ? (level, event, fields = {}) => console[level === 'error' ? 'error' : 'log'](
-    JSON.stringify({ ts: new Date().toISOString(), level, event, ...fields }),
-  )
-  : (level, event, fields = {}) => console.log(`[printario:${level}] ${event}`, fields);
-
-function requestLogger(req, res, next) {
-  const startedAt = process.hrtime.bigint();
-  res.on('finish', () => {
-    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
-    if (req.path.startsWith('/api/')) {
-      log('info', 'request', {
-        method: req.method,
-        path: req.path,
-        status: res.statusCode,
-        durationMs: Math.round(durationMs * 10) / 10,
-      });
-    }
-  });
-  next();
-}
-app.use(requestLogger);
-
-const CSP_DIRECTIVES = [
-  "default-src 'self'",
-  // Vite injects small inline style blocks; keep scripts strictly self-hosted.
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self'",
-  "connect-src 'self'",
-  "manifest-src 'self'",
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-];
-
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
-  res.setHeader('Content-Security-Policy', CSP_DIRECTIVES.join('; '));
   next();
 });
 
 // Small, process-local cache. Songbook payloads can be a few megabytes, so keep
 // the entry count deliberately small.
-//
-// NOTE: this cache is intentionally per-process. If you scale to multiple
-// replicas behind a load balancer, either replace it with a shared store
-// (e.g. Redis) or accept that each replica warms its own copy. The keys below
-// are normalised so semantically identical links still share an entry.
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 12;
 const cache = new Map();
 const inflight = new Map();
-let cacheStats = { hits: 0, misses: 0 };
 
 function cacheGet(key) {
   const hit = cache.get(key);
@@ -117,31 +64,15 @@ async function importWithCache(input) {
   } catch (error) {
     throw error;
   }
-  // Normalise the key: parseKytarioUrl already strips locale prefixes, trailing
-  // paths and www., but lowercase the kind so future variants cannot split the
-  // cache for the same resource.
-  const key = `${descriptor.kind.toLowerCase()}:${descriptor.token}`;
+  const key = `${descriptor.kind}:${descriptor.token}`;
   const cached = cacheGet(key);
-  if (cached) {
-    cacheStats.hits += 1;
-    return { ...cached, cached: true };
-  }
-  cacheStats.misses += 1;
+  if (cached) return { ...cached, cached: true };
 
   if (inflight.has(key)) return inflight.get(key);
 
-  const startedAt = process.hrtime.bigint();
   const promise = importFromKytario(input)
     .then((data) => {
-      // Freeze a deep copy before caching so a mutated response object can
-      // never poison later readers of the cache.
-      cacheSet(key, structuredClone(data));
-      log('info', 'import', {
-        key,
-        cached: false,
-        durationMs: Math.round(Number(process.hrtime.bigint() - startedAt) / 1e6),
-        songs: data?.songs?.length ?? 0,
-      });
+      cacheSet(key, data);
       return { ...data, cached: false };
     })
     .finally(() => {
@@ -152,33 +83,17 @@ async function importWithCache(input) {
 }
 
 // Very light abuse protection: imports are expensive and hit a third party.
-const RATE_WINDOW_MS = 60_000;
-const RATE_MAX_PER_WINDOW = 30;
-const RATE_SWEEP_INTERVAL_MS = 5 * 60_000;
 const rate = new Map();
-
-// Periodically evict stale buckets so the map cannot grow without bound when
-// many distinct client IPs pass through (e.g. behind a large proxy fleet).
-const rateSweeper = setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of rate) {
-    if (now - entry.start > RATE_WINDOW_MS) rate.delete(key);
-  }
-}, RATE_SWEEP_INTERVAL_MS);
-rateSweeper.unref();
-
 function rateLimit(req, res, next) {
   const key = req.ip || 'unknown';
   const now = Date.now();
   const entry = rate.get(key);
-  if (!entry || now - entry.start > RATE_WINDOW_MS) {
+  if (!entry || now - entry.start > 60_000) {
     rate.set(key, { start: now, count: 1 });
     return next();
   }
   entry.count += 1;
-  if (entry.count > RATE_MAX_PER_WINDOW) {
-    log('warn', 'rate_limited', { ip: key });
-    res.setHeader('Retry-After', Math.ceil((entry.start + RATE_WINDOW_MS - now) / 1000));
+  if (entry.count > 30) {
     return res.status(429).json({
       ok: false,
       error: {
@@ -191,27 +106,13 @@ function rateLimit(req, res, next) {
 }
 
 app.get('/api/health', (_req, res) => {
-  const total = cacheStats.hits + cacheStats.misses;
-  res.json({
-    ok: true,
-    version: '1.0.0',
-    cache: {
-      entries: cache.size,
-      hits: cacheStats.hits,
-      misses: cacheStats.misses,
-      hitRate: total > 0 ? Math.round((cacheStats.hits / total) * 100) / 100 : null,
-    },
-  });
+  res.json({ ok: true, version: '1.0.0' });
 });
 
 app.get('/api/qr/:token', async (req, res, next) => {
   try {
     const svg = await fetchSongbookQrSvg(req.params.token);
-    // SVG is XML markup from a third party; force sniffing/download semantics
-    // and sandbox it if it is ever embedded, so it cannot execute in our origin.
     res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Disposition', 'inline; filename="qr.svg"');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.send(svg);
   } catch (error) {

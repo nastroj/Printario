@@ -288,11 +288,14 @@ export function ColorControl({
   );
 }
 
-export function SelectControl({ label, value, onChange, options }) {
+export function SelectControl({ label, hint, value, onChange, options, ariaLabel }) {
   return (
     <label className="select-control">
-      <span className="control-label"><span>{label}</span></span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
+      <span className="control-label">
+        <span>{label}</span>
+        {hint && <span className="control-value">{hint}</span>}
+      </span>
+      <select value={value} aria-label={ariaLabel || label} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
       </select>
     </label>

@@ -443,12 +443,7 @@ export function PdfExportDialog({
             <span className="modal-head-icon" aria-hidden="true">
               <Download size={16} />
             </span>
-            <div>
-              <span className="settings-sheet-kicker">
-                {result.songbook?.name} · {pageCount} pages
-              </span>
-              <h3 id="pdf-export-title">Export PDF</h3>
-            </div>
+            <h3 id="pdf-export-title">Export PDF</h3>
           </div>
           <button
             type="button"
@@ -706,9 +701,11 @@ export function PdfExportDialog({
 
         <div className="pdf-export-foot">
           <div className="pdf-export-summary-line">
+            {result.songbook?.name ? `${result.songbook.name} · ` : ''}
+            {pageCount} {pageCount === 1 ? 'page' : 'pages'}
             {isPro
-              ? `${sheets.length} ${sheets.length === 1 ? 'sheet' : 'sheets'} · ${layout ? `${Math.round(layout.sheetWidthMm)} × ${Math.round(layout.sheetHeightMm)} mm` : ''}`
-              : `${pageCount} ${pageCount === 1 ? 'page' : 'pages'} · ${trimW} × ${trimH} mm`}
+              ? ` · ${sheets.length} ${sheets.length === 1 ? 'sheet' : 'sheets'}${layout ? ` · ${Math.round(layout.sheetWidthMm)} × ${Math.round(layout.sheetHeightMm)} mm` : ''}`
+              : ` · ${trimW} × ${trimH} mm`}
           </div>
           <button
             type="button"

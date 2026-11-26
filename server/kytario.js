@@ -208,74 +208,19 @@ export function parseKytarioUrl(rawInput) {
   };
 }
 
-/**
- * SSRF guard: only allow plain http(s) URLs on the pinned Kytario origins.
- * Credentials, explicit ports and non-Kytario hosts are rejected before any
- * network request is made. Redirects are re-validated in fetchText below so a
- * malicious (or compromised) response cannot bounce us to an internal address.
- */
-export function assertSafeUpstreamUrl(rawUrl) {
-  let url;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    throw new ImportError('Internal error while resolving the upstream link.', {
-      code: 'BAD_UPSTREAM_URL',
-      status: 500,
-    });
-  }
-  if (!['http:', 'https:'].includes(url.protocol)) {
-    throw new ImportError('Only http(s) upstream links are allowed.', { code: 'BAD_UPSTREAM_URL', status: 500 });
-  }
-  if (url.username || url.password) {
-    throw new ImportError('Upstream links must not contain credentials.', { code: 'BAD_UPSTREAM_URL', status: 500 });
-  }
-  if (url.port !== '') {
-    throw new ImportError('Upstream links must not specify a port.', { code: 'BAD_UPSTREAM_URL', status: 500 });
-  }
-  const host = url.hostname.toLowerCase().replace(/^www\./, '');
-  const allowedHosts = new Set([
-    new URL(KYTARIO_ORIGIN).hostname,
-    'kytario.cz',
-  ]);
-  if (!allowedHosts.has(host)) {
-    throw new ImportError('Refusing to follow a link outside of Kytario.', { code: 'BAD_UPSTREAM_URL', status: 500 });
-  }
-  return url;
-}
-
-const RETRYABLE_STATUS = new Set([500, 502, 503, 504]);
-const FETCH_MAX_ATTEMPTS = 2;
-const FETCH_RETRY_BASE_DELAY_MS = 300;
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function fetchTextOnce(url, accept) {
+async function fetchText(url, { accept = 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.5' } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    // Manual redirect handling so every hop can be re-validated (SSRF pinning).
     const response = await fetch(url, {
       signal: controller.signal,
-      redirect: 'manual',
+      redirect: 'follow',
       headers: {
         accept,
         'accept-language': 'en,cs;q=0.8',
         'user-agent': 'Printario/1.0 (songbook printing tool; +https://github.com/printario)',
       },
     });
-
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get('location');
-      if (!location) {
-        throw new ImportError('Kytario sent a broken redirect. Please try again.', {
-          code: 'UPSTREAM_ERROR',
-          status: 502,
-        });
-      }
-      const nextUrl = assertSafeUpstreamUrl(new URL(location, url).toString());
-      return fetchTextOnce(nextUrl.toString(), accept);
-    }
 
     if (!response.ok) {
       const error = new ImportError(
@@ -288,7 +233,6 @@ async function fetchTextOnce(url, accept) {
         },
       );
       error.upstreamStatus = response.status;
-      error.retryable = RETRYABLE_STATUS.has(response.status);
       throw error;
     }
 
@@ -311,41 +255,18 @@ async function fetchTextOnce(url, accept) {
   } catch (error) {
     if (error instanceof ImportError) throw error;
     if (error?.name === 'AbortError') {
-      const timeout = new ImportError('Kytario took too long to respond. Please try again.', {
+      throw new ImportError('Kytario took too long to respond. Please try again.', {
         code: 'UPSTREAM_TIMEOUT',
         status: 504,
       });
-      timeout.retryable = true;
-      throw timeout;
     }
-    const unreachable = new ImportError('Couldn’t reach Kytario. Check your connection and try again.', {
+    throw new ImportError('Couldn’t reach Kytario. Check your connection and try again.', {
       code: 'UPSTREAM_UNREACHABLE',
       status: 502,
     });
-    unreachable.retryable = true;
-    throw unreachable;
   } finally {
     clearTimeout(timer);
   }
-}
-
-async function fetchText(url, { accept = 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.5' } = {}) {
-  assertSafeUpstreamUrl(url);
-  let lastError = null;
-  for (let attempt = 0; attempt < FETCH_MAX_ATTEMPTS; attempt += 1) {
-    try {
-      return await fetchTextOnce(url, accept);
-    } catch (error) {
-      lastError = error;
-      // Only retry transient failures, and never after a successful parse path.
-      const retryable = error?.retryable === true && attempt < FETCH_MAX_ATTEMPTS - 1;
-      if (!retryable) throw error;
-      // Exponential backoff with jitter so concurrent imports don't stampede.
-      const delay = FETCH_RETRY_BASE_DELAY_MS * (2 ** attempt) * (0.5 + Math.random());
-      await sleep(delay);
-    }
-  }
-  throw lastError;
 }
 
 async function fetchJson(url) {

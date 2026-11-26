@@ -5,6 +5,7 @@ export const PAPER_SIZES = {
   A5: { label: 'A5', width: 148, height: 210, hint: '148 × 210 mm' },
   Letter: { label: 'Letter', width: 215.9, height: 279.4, hint: '8.5 × 11 in' },
   B5: { label: 'B5', width: 176, height: 250, hint: '176 × 250 mm' },
+  Custom: { label: 'Custom', width: 297, height: 210, hint: 'Custom mm' },
 };
 
 export const FONT_STACKS = {
@@ -106,6 +107,8 @@ export const DEFAULT_MARGINS = { top: 6, right: 5, bottom: 6, left: 12 };
 
 export const DEFAULT_SETTINGS = {
   paper: 'A4',
+  customPaperWidth: 297,
+  customPaperHeight: 210,
   orientation: 'landscape',
   columns: 'auto',
   bookMode: false,
@@ -163,6 +166,11 @@ export function getTypeScale(geometry, columns) {
   return Math.max(0.5, Math.min(2.4, scale));
 }
 
+function clampPaperDimension(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) ? Math.min(1000, Math.max(80, Math.round(num * 10) / 10)) : fallback;
+}
+
 function isLegacyDefaultMargins(margins) {
   return Boolean(
     margins
@@ -204,6 +212,8 @@ export function loadSettings() {
         : DEFAULT_MARGINS[side];
     }
     if (!PAPER_SIZES[merged.paper]) merged.paper = DEFAULT_SETTINGS.paper;
+    merged.customPaperWidth = clampPaperDimension(merged.customPaperWidth, DEFAULT_SETTINGS.customPaperWidth);
+    merged.customPaperHeight = clampPaperDimension(merged.customPaperHeight, DEFAULT_SETTINGS.customPaperHeight);
     if (!['portrait', 'landscape'].includes(merged.orientation)) merged.orientation = 'landscape';
     if (!['auto', 'one', 'two'].includes(merged.columns)) merged.columns = 'auto';
     merged.fontFamily = 'inter';
@@ -250,10 +260,17 @@ export function getPageMargins(settings, pageNumber = 1) {
 }
 
 export function getGeometry(settings, pageNumber = 1) {
-  const paper = PAPER_SIZES[settings.paper] ?? PAPER_SIZES.A4;
-  const landscape = settings.orientation === 'landscape';
-  const width = landscape ? paper.height : paper.width;
-  const height = landscape ? paper.width : paper.height;
+  const isCustom = settings.paper === 'Custom';
+  const customW = clampPaperDimension(settings.customPaperWidth, DEFAULT_SETTINGS.customPaperWidth);
+  const customH = clampPaperDimension(settings.customPaperHeight, DEFAULT_SETTINGS.customPaperHeight);
+  const paper = isCustom
+    ? { label: 'Custom', width: customW, height: customH, hint: `${customW} × ${customH} mm` }
+    : (PAPER_SIZES[settings.paper] ?? PAPER_SIZES.A4);
+  const landscape = isCustom
+    ? (customW > customH || (customW === customH && settings.orientation === 'landscape'))
+    : settings.orientation === 'landscape';
+  const width = isCustom ? customW : (landscape ? paper.height : paper.width);
+  const height = isCustom ? customH : (landscape ? paper.width : paper.height);
   const m = getPageMargins(settings, pageNumber);
   const pxPerMm = 96 / 25.4;
   return {

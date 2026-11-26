@@ -327,3 +327,50 @@ test('paginateBook flags songs that overflow past the bottom margin and clears w
   assert.equal(smallerResult.overflowBySongIndex[1].overflows, false);
 });
 
+test('custom paper size resolves dimensions directly and clamps in loadSettings', () => {
+  const customPortrait = getGeometry({
+    ...DEFAULT_SETTINGS,
+    paper: 'Custom',
+    customPaperWidth: 160,
+    customPaperHeight: 240,
+    orientation: 'portrait',
+    margins: { top: 6, right: 5, bottom: 6, left: 12 },
+  });
+  assert.equal(customPortrait.widthMm, 160);
+  assert.equal(customPortrait.heightMm, 240);
+  assert.equal(customPortrait.landscape, false);
+  assert.equal(customPortrait.contentWidthMm, 143);
+  assert.equal(customPortrait.contentHeightMm, 228);
+
+  const customLandscape = getGeometry({
+    ...DEFAULT_SETTINGS,
+    paper: 'Custom',
+    customPaperWidth: 260,
+    customPaperHeight: 180,
+    orientation: 'landscape',
+  });
+  assert.equal(customLandscape.widthMm, 260);
+  assert.equal(customLandscape.heightMm, 180);
+  assert.equal(customLandscape.landscape, true);
+
+  const prevStorage = globalThis.localStorage;
+  const store = new Map([
+    ['printario.settings.v3', JSON.stringify({
+      paper: 'Custom',
+      customPaperWidth: 40,
+      customPaperHeight: 2000,
+    })],
+  ]);
+  globalThis.localStorage = {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => store.set(key, value),
+  };
+  try {
+    const loaded = loadSettings();
+    assert.equal(loaded.paper, 'Custom');
+    assert.equal(loaded.customPaperWidth, 80);
+    assert.equal(loaded.customPaperHeight, 1000);
+  } finally {
+    globalThis.localStorage = prevStorage;
+  }
+});

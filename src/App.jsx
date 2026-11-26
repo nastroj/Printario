@@ -19,6 +19,8 @@ import { addRecent, cacheSongbook, loadRecent, readCachedSongbook, removeRecent 
 function getLayoutKey(settings) {
   return JSON.stringify({
     paper: settings.paper,
+    customPaperWidth: settings.paper === 'Custom' ? settings.customPaperWidth : undefined,
+    customPaperHeight: settings.paper === 'Custom' ? settings.customPaperHeight : undefined,
     orientation: settings.orientation,
     columns: settings.columns,
     bookMode: Boolean(settings.bookMode),
@@ -278,28 +280,12 @@ export default function App() {
       throw new Error('The server sent an unreadable response. Please try again.');
     }
     if (!response.ok || !payload?.ok) {
-      const code = payload?.error?.code;
-      // Map server error codes to specific, actionable user-facing guidance so
-      // each failure mode explains what to do next (retry vs. fix the link).
-      const CODE_HINTS = {
-        RATE_LIMITED: 'Wait about a minute, then try again.',
-        UPSTREAM_TIMEOUT: 'Kytario is slow right now — this is usually temporary. Please retry in a moment.',
-        UPSTREAM_UNREACHABLE: 'We could not reach Kytario at all. Check your internet connection and retry.',
-        SONGBOOK_NOT_FOUND: 'Double-check the link: the songbook may be private or renamed.',
-        EMPTY_SONGBOOK: 'This songbook has no printable songs yet. Open it on Kytario to confirm.',
-        MULTIPLE_SONGBOOKS: 'Open one of the listed songbooks on Kytario and paste that exact link.',
-        UNSUPPORTED_HOST: 'Only kytario.com links can be imported.',
-      };
-      const base = payload?.error?.message || `Import failed (${code ?? response.status}).`;
-      const hint = CODE_HINTS[code];
+      const base = payload?.error?.message || `Import failed (${response.status}).`;
       const candidates = payload?.error?.details?.candidates;
       const extra = Array.isArray(candidates) && candidates.length
         ? ` Try: ${candidates.map((item) => `kytario.com/${item.token}`).join(', ')}`
         : '';
-      const error = new Error(`${base}${extra}${hint ? ` ${hint}` : ''}`);
-      error.code = code;
-      error.retryable = ['RATE_LIMITED', 'UPSTREAM_TIMEOUT', 'UPSTREAM_UNREACHABLE', 'UPSTREAM_ERROR'].includes(code);
-      throw error;
+      throw new Error(`${base}${extra}`);
     }
     return payload.data;
   }, []);
@@ -365,26 +351,13 @@ export default function App() {
 
     try {
       const { exportSongbookPdf } = await import('./lib/pdf.js');
-      const exportStartedAt = performance.now();
-      const { filename, fontFallback } = await exportSongbookPdf({
+      const filename = await exportSongbookPdf({
         result,
         pdfOptions,
         onProgress: (p) => setPdfProgress(p),
         signal: controller.signal,
       });
-      // Structured client-side telemetry for export latency and font fallbacks.
-      console.info('[printario] pdf export', {
-        filename,
-        pages: total,
-        mode: pdfOptions?.mode ?? 'standard',
-        durationMs: Math.round(performance.now() - exportStartedAt),
-        fontFallback,
-      });
-      if (fontFallback) {
-        showToast('Downloaded PDF, but the embedded font failed to load — Helvetica metrics were used instead.', 'error');
-      } else {
-        showToast(`Downloaded ${filename}`, 'info');
-      }
+      showToast(`Downloaded ${filename}`, 'info');
     } catch (error) {
       if (controller.signal.aborted || error?.name === 'AbortError' || error?.message === 'Export cancelled') {
         showToast('PDF export cancelled.', 'info');
@@ -495,8 +468,12 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [result, drawerOpen, settingsOpen, handlePrint]);
 
-  const updateSetting = useCallback((key, value) => {
-    setSettings((current) => ({ ...current, [key]: value }));
+  const updateSetting = useCallback((keyOrPatch, value) => {
+    setSettings((current) => (
+      typeof keyOrPatch === 'object' && keyOrPatch !== null
+        ? { ...current, ...keyOrPatch }
+        : { ...current, [keyOrPatch]: value }
+    ));
   }, []);
 
   const updateMargins = useCallback((side, value) => {

@@ -105,7 +105,7 @@ test('exportSongbookPdf generates compact vector PDF with exact page dimensions 
     });
     const elapsedMs = performance.now() - started;
 
-    assert.equal(filename.filename, 'Pisnicky_na_cesty.pdf');
+    assert.equal(filename, 'Pisnicky_na_cesty.pdf');
     assert.ok(fs.existsSync(outPath), 'Expected PDF output file to be written');
     const stat = fs.statSync(outPath);
     assert.ok(stat.size < 2 * 1024 * 1024, `Expected compact PDF (< 2MB for 122 pages), got ${stat.size} bytes`);
@@ -299,7 +299,7 @@ test('imposition layout and pro PDF export support 2-up A4 on A3, SRA3, and book
           slugInfo: true,
         },
       });
-      assert.equal(f1.filename, 'Pro_Press_Book_A3_2up.pdf');
+      assert.equal(f1, 'Pro_Press_Book_A3_2up.pdf');
       assert.ok(fs.existsSync(a3Path));
     }
     const a3Content = fs.readFileSync(a3Path, 'latin1');
@@ -330,7 +330,7 @@ test('imposition layout and pro PDF export support 2-up A4 on A3, SRA3, and book
         slugInfo: true,
       },
     });
-    assert.equal(f2.filename, 'Pro_Press_Book_SRA3_booklet.pdf');
+    assert.equal(f2, 'Pro_Press_Book_SRA3_booklet.pdf');
     assert.ok(fs.existsSync(sra3BookletPath));
     const sra3Content = fs.readFileSync(sra3BookletPath, 'latin1');
     const sra3Boxes = sra3Content.match(/\/MediaBox \[[^\]]+\]/g) || [];

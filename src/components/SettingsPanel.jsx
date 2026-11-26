@@ -64,21 +64,75 @@ export function SettingsPanel({
             open={sectionsOpen.pageSetup}
             onToggle={() => toggleSection('pageSetup')}
           >
-            <span className="control-label"><span>Paper size</span><span className="control-value">{geometry.hint}</span></span>
-            <Segmented
+            <SelectControl
+              label="Paper size"
+              hint={settings.paper === 'Custom'
+                ? `${layoutGeometry.widthMm} × ${layoutGeometry.heightMm} mm`
+                : geometry.hint}
               value={settings.paper}
-              columns={2}
               ariaLabel="Paper size"
               onChange={(value) => update('paper', value)}
-              options={Object.entries(PAPER_SIZES).map(([value, item]) => ({ value, label: item.label, hint: item.hint }))}
+              options={Object.entries(PAPER_SIZES).map(([value, item]) => ({
+                value,
+                label: value === 'Custom' ? item.label : `${item.label} (${item.hint})`,
+              }))}
             />
+
+            {settings.paper === 'Custom' && (
+              <div className="margin-grid custom-paper-grid">
+                <StepperControl
+                  label="Width"
+                  hint="mm"
+                  value={layoutGeometry.widthMm}
+                  min={80}
+                  max={1000}
+                  step={1}
+                  onChange={(w) => {
+                    const h = layoutGeometry.heightMm;
+                    update({
+                      customPaperWidth: w,
+                      orientation: w > h ? 'landscape' : w < h ? 'portrait' : settings.orientation,
+                    });
+                  }}
+                />
+                <StepperControl
+                  label="Height"
+                  hint="mm"
+                  value={layoutGeometry.heightMm}
+                  min={80}
+                  max={1000}
+                  step={1}
+                  onChange={(h) => {
+                    const w = layoutGeometry.widthMm;
+                    update({
+                      customPaperHeight: h,
+                      orientation: w > h ? 'landscape' : w < h ? 'portrait' : settings.orientation,
+                    });
+                  }}
+                />
+              </div>
+            )}
 
             <span className="control-label spaced"><span>Orientation</span></span>
             <Segmented
               value={settings.orientation}
               columns={2}
               ariaLabel="Paper orientation"
-              onChange={(value) => update('orientation', value)}
+              onChange={(value) => {
+                if (settings.paper === 'Custom') {
+                  const w = layoutGeometry.widthMm;
+                  const h = layoutGeometry.heightMm;
+                  if ((value === 'portrait' && w > h) || (value === 'landscape' && w < h)) {
+                    update({
+                      orientation: value,
+                      customPaperWidth: h,
+                      customPaperHeight: w,
+                    });
+                    return;
+                  }
+                }
+                update('orientation', value);
+              }}
               options={[
                 { value: 'portrait', label: 'Portrait', icon: <span className="orientation-icon portrait" /> },
                 { value: 'landscape', label: 'Landscape', icon: <span className="orientation-icon landscape" /> },
