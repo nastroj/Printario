@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Download, Info, Plus, Sparkles, X,
+  AlertTriangle, Download, Info, ListMusic, Plus, Printer, Settings2, Sparkles, X,
 } from 'lucide-react';
 import { ImportScreen } from './components/ImportScreen.jsx';
 import { PreviewStage } from './components/PreviewStage.jsx';
@@ -82,7 +82,19 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function StudioHeader({ book, onNewBook, installPrompt, onInstall }) {
+function StudioHeader({
+  book,
+  onNewBook,
+  installPrompt,
+  onInstall,
+  onOpenContents,
+  onToggleSettings,
+  settingsOpen,
+  overflowCount,
+  onDownloadPdf,
+  onPrint,
+  busy,
+}) {
   return (
     <header className="studio-header">
       <div className="studio-brand">
@@ -94,13 +106,52 @@ function StudioHeader({ book, onNewBook, installPrompt, onInstall }) {
         </div>
       </div>
       <div className="studio-actions">
+        <button
+          type="button"
+          className="btn btn-ghost toolbar-button"
+          onClick={onOpenContents}
+          title={overflowCount > 0
+            ? `${overflowCount} ${overflowCount === 1 ? 'song clips' : 'songs clip'} past the bottom margin`
+            : undefined}
+        >
+          <ListMusic size={16} />
+          <span>Contents</span>
+          {overflowCount > 0 && (
+            <span className="toolbar-warn-badge" aria-label={`${overflowCount} songs clip`}>
+              <AlertTriangle size={10} strokeWidth={2.4} aria-hidden="true" />
+              {overflowCount}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          className={`btn btn-ghost toolbar-button settings-toggle-button${settingsOpen ? ' is-active' : ''}`}
+          onClick={onToggleSettings}
+          aria-expanded={settingsOpen}
+        >
+          <Settings2 size={16} />
+          <span>Settings</span>
+        </button>
+        <span className="header-sep" aria-hidden="true" />
         {installPrompt && (
-          <button type="button" className="header-link" onClick={onInstall}>
-            <Download size={15} /> <span>Install app</span>
+          <button type="button" className="btn btn-ghost" onClick={onInstall}>
+            <Download size={16} /> <span>Install</span>
           </button>
         )}
-        <button type="button" className="header-link" onClick={onNewBook} aria-label="New songbook">
-          <Plus size={15} /> <span>New songbook</span>
+        <button type="button" className="btn btn-ghost" onClick={onNewBook} aria-label="New songbook">
+          <Plus size={16} /> <span>New</span>
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary header-pdf"
+          onClick={onDownloadPdf}
+          disabled={busy}
+          title="Download PDF directly"
+        >
+          <Download size={16} /> <span>PDF</span>
+        </button>
+        <button type="button" className="btn btn-primary header-print" onClick={onPrint} disabled={busy}>
+          <Printer size={16} /> <span>Print</span>
         </button>
       </div>
     </header>
@@ -512,6 +563,19 @@ export default function App() {
           onNewBook={newBook}
           installPrompt={installPrompt}
           onInstall={install}
+          onOpenContents={() => {
+            setSettingsOpen(false);
+            setDrawerOpen(true);
+          }}
+          onToggleSettings={() => {
+            setDrawerOpen(false);
+            setSettingsOpen((open) => !open);
+          }}
+          settingsOpen={settingsOpen}
+          overflowCount={result?.overflowCount ?? 0}
+          onDownloadPdf={handleOpenPdfExport}
+          onPrint={handlePrint}
+          busy={!result || settingsPending || Boolean(pdfProgress)}
         />
         <div className="studio-body">
           <PreviewStage
@@ -519,22 +583,10 @@ export default function App() {
             settings={settings}
             currentPage={currentPage}
             onPageChange={setCurrentPage}
-            onOpenContents={() => {
-              setSettingsOpen(false);
-              setDrawerOpen(true);
-            }}
             onOpenSettings={() => {
               setDrawerOpen(false);
               setSettingsOpen(true);
             }}
-            onToggleSettings={() => {
-              setDrawerOpen(false);
-              setSettingsOpen((open) => !open);
-            }}
-            settingsOpen={settingsOpen}
-            onPrint={handlePrint}
-            onDownloadPdf={handleOpenPdfExport}
-            pdfGenerating={Boolean(pdfProgress)}
             reflowing={settingsPending}
           />
         </div>
@@ -565,12 +617,6 @@ export default function App() {
             update={updateSetting}
             setMargin={updateMargins}
             onReset={resetSettings}
-            onPrint={() => {
-              setSettingsOpen(false);
-              handlePrint();
-            }}
-            onDownloadPdf={handleOpenPdfExport}
-            pdfGenerating={Boolean(pdfProgress)}
             onClose={() => setSettingsOpen(false)}
           />
         </div>
