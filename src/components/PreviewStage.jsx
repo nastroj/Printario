@@ -50,13 +50,7 @@ export function PreviewStage({
   settings,
   currentPage,
   onPageChange,
-  onOpenContents,
   onOpenSettings,
-  onToggleSettings,
-  settingsOpen,
-  onPrint,
-  onDownloadPdf,
-  pdfGenerating,
   reflowing,
 }) {
   const stageRef = useRef(null);
@@ -199,59 +193,17 @@ export function PreviewStage({
           {result && <PageNavigator currentPage={currentPage} pageCount={result.pageCount} onChange={onPageChange} />}
         </div>
         <div className="preview-toolbar-right">
-          <button
-            type="button"
-            className="toolbar-button"
-            onClick={onOpenContents}
-            title={totalOverflowCount > 0
-              ? `${totalOverflowCount} ${totalOverflowCount === 1 ? 'song clips' : 'songs clip'} past the bottom margin`
-              : undefined}
-          >
-            <ListMusic size={16} />
-            <span>Contents</span>
-            {totalOverflowCount > 0 && (
-              <span className="toolbar-warn-badge" aria-label={`${totalOverflowCount} songs clip`}>
-                <AlertTriangle size={10} strokeWidth={2.4} aria-hidden="true" />
-                {totalOverflowCount}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            className={`toolbar-button settings-toggle-button${settingsOpen ? ' is-active' : ''}`}
-            onClick={onToggleSettings}
-            aria-expanded={settingsOpen}
-          >
-            <Settings2 size={16} /> <span>Settings</span>
-          </button>
-          <div className="zoom-control">
-            <button type="button" className="mini-icon" onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.1).toFixed(2))))} aria-label="Zoom out">
-              <Minus size={14} />
+          <div className="zoom-control" role="group" aria-label="Zoom">
+            <button type="button" className="zoom-btn" onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.1).toFixed(2))))} aria-label="Zoom out" title="Zoom out">
+              <Minus size={16} />
             </button>
             <button type="button" className="zoom-value" onClick={() => setZoom(1)} title="Fit to window">
               {Math.round(scale * 100)}%
             </button>
-            <button type="button" className="mini-icon" onClick={() => setZoom((z) => Math.min(2.4, Number((z + 0.1).toFixed(2))))} aria-label="Zoom in">
-              <Plus size={14} />
+            <button type="button" className="zoom-btn" onClick={() => setZoom((z) => Math.min(2.4, Number((z + 0.1).toFixed(2))))} aria-label="Zoom in" title="Zoom in">
+              <Plus size={16} />
             </button>
           </div>
-          <button
-            type="button"
-            className="toolbar-button header-pdf"
-            onClick={onDownloadPdf}
-            disabled={!result || reflowing || pdfGenerating}
-            title="Download PDF directly"
-          >
-            <Download size={16} /> <span>PDF</span>
-          </button>
-          <button
-            type="button"
-            className="primary-button header-print"
-            onClick={onPrint}
-            disabled={!result || reflowing || pdfGenerating}
-          >
-            <Printer size={16} /> <span>Print</span>
-          </button>
         </div>
       </div>
     </section>

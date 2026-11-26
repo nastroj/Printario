@@ -14,7 +14,7 @@ import {
 
 export function SettingsPanel({
   book, settings, update, setMargin, onReset,
-  onDownloadPdf, pdfGenerating, onClose,
+  onClose,
 }) {
   const geometry = PAPER_SIZES[settings.paper];
   const layoutGeometry = getGeometry(settings);
@@ -349,68 +349,31 @@ export function SettingsPanel({
         </div>
 
         <div className="panel-footer">
-          <button type="button" className="text-button" onClick={onReset}>
-            <RotateCcw size={14} /> Reset all settings
+          <button type="button" className="btn btn-ghost btn-danger-text" onClick={onReset}>
+            <RotateCcw size={15} /> <span>Reset all settings</span>
           </button>
           <span className="panel-version">Printario · v1.0</span>
         </div>
       </div>
-      <div className="settings-sheet-foot settings-foot-actions">
-        <button
-          type="button"
-          className="soft-button"
-          onClick={onDownloadPdf}
-          disabled={pdfGenerating}
-        >
-          <Download size={16} /> <span>Download PDF</span>
-        </button>
-        <div className="footer-nav-icons" role="group" aria-label="Quick section navigation">
+      <nav className="settings-jump" aria-label="Jump to section">
+        {[
+          ['section-page-setup', 'pageSetup', FileText, 'Page setup'],
+          ['section-typography', 'typography', Type, 'Typography'],
+          ['section-ink-paper', 'inkPaper', Palette, 'Ink & paper'],
+          ['section-book-extras', 'bookExtras', LayoutList, 'Book extras'],
+        ].map(([id, key, Icon, label]) => (
           <button
             type="button"
-            className="footer-nav-btn"
-            onClick={() => scrollToSection('section-page-setup', 'pageSetup')}
-            title="Page setup"
-            aria-label="Jump to Page setup"
+            key={id}
+            className="settings-jump-btn"
+            onClick={() => scrollToSection(id, key)}
+            aria-label={`Jump to ${label}`}
           >
-            <FileText size={16} />
+            <Icon size={16} aria-hidden="true" />
+            <span>{label}</span>
           </button>
-          <button
-            type="button"
-            className="footer-nav-btn"
-            onClick={() => scrollToSection('section-typography', 'typography')}
-            title="Typography"
-            aria-label="Jump to Typography"
-          >
-            <Type size={16} />
-          </button>
-          <button
-            type="button"
-            className="footer-nav-btn"
-            onClick={() => scrollToSection('section-ink-paper', 'inkPaper')}
-            title="Ink & paper"
-            aria-label="Jump to Ink & paper"
-          >
-            <Palette size={16} />
-          </button>
-          <button
-            type="button"
-            className="footer-nav-btn"
-            onClick={() => scrollToSection('section-book-extras', 'bookExtras')}
-            title="Book extras"
-            aria-label="Jump to Book extras"
-          >
-            <LayoutList size={16} />
-          </button>
-        </div>
-        <button
-          type="button"
-          className="icon-button"
-          onClick={onClose}
-          aria-label="Close settings"
-        >
-          <X size={18} />
-        </button>
-      </div>
+        ))}
+      </nav>
     </aside>
   );
 }

@@ -232,7 +232,7 @@ try {
   }
   document.querySelector('.overflow-banner-btn')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await waitFor('.settings-sheet-layer.is-open');
-  document.querySelector('.settings-foot-actions button[aria-label="Close settings"]')
+  document.querySelector(".settings-panel .settings-sheet-head button[aria-label=\"Close settings\"]")
     ?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 60));
 
@@ -262,7 +262,7 @@ try {
   if (!beforeBtn) throw new Error('Before line section label option missing');
   beforeBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 
-  const footerCloseBtn = document.querySelector('.settings-foot-actions button[aria-label="Close settings"]');
+  const footerCloseBtn = document.querySelector(".settings-panel .settings-sheet-head button[aria-label=\"Close settings\"]");
   if (!footerCloseBtn) throw new Error('Settings footer close button missing');
   footerCloseBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 100));
