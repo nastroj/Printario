@@ -1,3 +1,22 @@
+/**
+ * Printario — PDF generation engine.
+ *
+ * This module is organised into clearly separated sections so the file stays
+ * maintainable as it grows:
+ *
+ *   1. Geometry & font constants (fonts / Unicode sanitisation)
+ *   2. Text helpers (measuring, wrapping, truncation)
+ *   3. Page renderers (cover, contents, song pages — layout orchestration)
+ *   4. Prepress marks (crop / registration / slug for imposition mode)
+ *   5. Export orchestration (`exportSongbookPdf`)
+ *
+ * NOTE ON WEB WORKERS: this engine drives jsPDF against the live DOM-adjacent
+ * environment and reads fonts via `fetch`. Moving it into a Worker would
+ * require porting font fetching and blob download handling; the current
+ * implementation yields to the event loop every frame (~16ms) during export,
+ * which keeps the UI responsive in practice. Revisit worker offloading if
+ * exports grow large enough to still jank (see README "Performance").
+ */
 import { jsPDF } from 'jspdf';
 import {
   KYTARIO_PALETTE, getColumnCount, getPageMargins, getTypeScale,
@@ -24,6 +43,15 @@ const PDF_FONT_FAMILIES = {
 };
 
 const fontBase64Cache = new Map();
+
+// Tracks whether the embedded subset font actually loaded for the most recent
+// document, so callers can surface a fallback warning in the UI instead of
+// silently exporting with Helvetica metrics.
+let lastFontFallback = false;
+
+export function getLastFontFallback() {
+  return lastFontFallback;
+}
 
 /**
  * Generates a clean, filesystem-safe filename for the exported PDF.
@@ -107,9 +135,13 @@ async function setupPdfFonts(doc, fontFamily, signal) {
     doc.setFont(spec.name, 'normal');
     const fontObj = doc.getFont(spec.name, 'normal');
     const cmap = fontObj?.metadata?.cmap?.unicode?.codeMap ?? null;
+    lastFontFallback = false;
     return { fontName: spec.name, cmap };
   } catch (error) {
     if (signal?.aborted) throw error;
+    // Surface the fallback so the UI can warn that glyph metrics may differ.
+    lastFontFallback = true;
+    console.warn(`[printario] Embedded font "${spec.name}" failed to load; falling back to ${spec.fallback}.`, error);
     return { fontName: spec.fallback, cmap: null };
   }
 }
@@ -1324,5 +1356,5 @@ export async function exportSongbookPdf({
 
   const filename = getPdfFilename(songbook, resolvedPdfOpts);
   doc.save(filename);
-  return filename;
+  return { filename, fontFallback: lastFontFallback };
 }

@@ -14,5 +14,8 @@ COPY package*.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
-EXPOSE 5173
+# Keep EXPOSE in sync with the server's default port (see PORT in server/index.js).
+ENV PORT=3000
+EXPOSE 3000
+USER node
 CMD ["node", "server/index.js"]
