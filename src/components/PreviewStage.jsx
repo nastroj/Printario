@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertTriangle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Minus, Plus,
-  ListMusic, Printer, Settings2, Loader2,
+  ListMusic, Printer, Settings2, Loader2, Maximize2,
 } from 'lucide-react';
 import { PaperPage } from './PaperPage.jsx';
 
@@ -45,6 +45,78 @@ function PageNavigator({ currentPage, pageCount, onChange }) {
   );
 }
 
+function ZoomControl({ scale, pageScale, setZoom }) {
+  const percent = Math.round(scale * 100);
+  const basePresets = [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 400, 500];
+  const presets = basePresets.includes(percent)
+    ? basePresets
+    : [...basePresets, percent].sort((a, b) => a - b);
+
+  const stepZoom = (direction) => {
+    const step = 25;
+    const currentPercent = Math.round(scale * 100);
+    let nextPercent;
+    if (direction > 0) {
+      nextPercent = Math.floor(currentPercent / step) * step + step;
+      if (nextPercent <= currentPercent) {
+        nextPercent += step;
+      }
+    } else {
+      nextPercent = Math.ceil(currentPercent / step) * step - step;
+      if (nextPercent >= currentPercent) {
+        nextPercent -= step;
+      }
+    }
+    nextPercent = Math.max(25, Math.min(500, nextPercent));
+    setZoom((nextPercent / 100) / pageScale);
+  };
+
+  return (
+    <div className="zoom-control" role="group" aria-label="Zoom">
+      <button
+        type="button"
+        className="zoom-btn"
+        onClick={() => stepZoom(-1)}
+        aria-label="Zoom out"
+        title="Zoom out (-25%)"
+      >
+        <Minus size={16} />
+      </button>
+      <select
+        className="zoom-select"
+        value={percent}
+        onChange={(e) => {
+          const p = Number(e.target.value);
+          setZoom((p / 100) / pageScale);
+        }}
+        aria-label="Zoom level"
+      >
+        {presets.map((p) => (
+          <option key={p} value={p}>{p}%</option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="zoom-btn"
+        onClick={() => stepZoom(1)}
+        aria-label="Zoom in"
+        title="Zoom in (+25%)"
+      >
+        <Plus size={16} />
+      </button>
+      <button
+        type="button"
+        className="zoom-btn zoom-fit-btn"
+        onClick={() => setZoom(1)}
+        title="Fit to screen"
+        aria-label="Fit to screen"
+      >
+        <Maximize2 size={15} />
+      </button>
+    </div>
+  );
+}
+
 export function PreviewStage({
   result,
   settings,
@@ -54,6 +126,7 @@ export function PreviewStage({
   reflowing,
 }) {
   const stageRef = useRef(null);
+  const innerRef = useRef(null);
   const [stageSize, setStageSize] = useState({ width: 900, height: 700 });
   const [zoom, setZoom] = useState(1);
   const [domOverflow, setDomOverflow] = useState(false);
@@ -66,11 +139,15 @@ export function PreviewStage({
       const borderBox = Array.isArray(observedBox) ? observedBox[0] : observedBox;
       const rect = el.getBoundingClientRect();
       const style = getComputedStyle(el);
+      const innerEl = innerRef.current;
+      const innerStyle = innerEl ? getComputedStyle(innerEl) : null;
       const px = (value) => Number.parseFloat(value) || 0;
       const horizontalInsets = px(style.paddingLeft) + px(style.paddingRight)
-        + px(style.borderLeftWidth) + px(style.borderRightWidth);
+        + px(style.borderLeftWidth) + px(style.borderRightWidth)
+        + (innerStyle ? px(innerStyle.paddingLeft) + px(innerStyle.paddingRight) : 0);
       const verticalInsets = px(style.paddingTop) + px(style.paddingBottom)
-        + px(style.borderTopWidth) + px(style.borderBottomWidth);
+        + px(style.borderTopWidth) + px(style.borderBottomWidth)
+        + (innerStyle ? px(innerStyle.paddingTop) + px(innerStyle.paddingBottom) : 0);
       const hasBorderBox = borderBox?.inlineSize != null && borderBox?.blockSize != null;
       const hasRect = rect.width > 0 || rect.height > 0;
       const width = hasBorderBox
@@ -135,42 +212,44 @@ export function PreviewStage({
     <section className="preview-pane">
       <div className="preview-stage" ref={stageRef}>
         <div className="stage-grain" aria-hidden="true" />
-        {!result && (
-          <div className="stage-loading">
-            <div className="loading-orbit"><Loader2 size={26} className="spin" /></div>
-            <strong>Preparing the preview…</strong>
-            <p>Building the song pages.</p>
-          </div>
-        )}
-        {result && page && (
-          <div className="paper-frame" style={{ width: `${pageWidth}px`, height: `${pageHeight}px` }}>
-            <div className="paper-clip">
-              <div
-                className="paper-scaler"
-                style={{
-                  width: `${geometry.widthPx}px`,
-                  height: `${geometry.heightPx}px`,
-                  transform: `scale(${scale})`,
-                }}
-              >
-                <PaperPage
-                  page={page}
-                  book={result.songbook}
-                  settings={appliedSettings}
-                  geometry={geometry}
-                />
-              </div>
+        <div className="preview-stage-inner" ref={innerRef}>
+          {!result && (
+            <div className="stage-loading">
+              <div className="loading-orbit"><Loader2 size={26} className="spin" /></div>
+              <strong>Preparing the preview…</strong>
+              <p>Building the song pages.</p>
             </div>
-            <div className="paper-shadow" aria-hidden="true" />
-          </div>
-        )}
-        {reflowing && result && (
-          <div className="reflow-overlay">
-            <Loader2 size={17} className="spin" />
-            <span>Reflowing pages…</span>
-          </div>
-        )}
+          )}
+          {result && page && (
+            <div className="paper-frame" style={{ width: `${pageWidth}px`, height: `${pageHeight}px` }}>
+              <div className="paper-clip">
+                <div
+                  className="paper-scaler"
+                  style={{
+                    width: `${geometry.widthPx}px`,
+                    height: `${geometry.heightPx}px`,
+                    transform: `scale(${scale})`,
+                  }}
+                >
+                  <PaperPage
+                    page={page}
+                    book={result.songbook}
+                    settings={appliedSettings}
+                    geometry={geometry}
+                  />
+                </div>
+              </div>
+              <div className="paper-shadow" aria-hidden="true" />
+            </div>
+          )}
+        </div>
       </div>
+      {reflowing && result && (
+        <div className="reflow-overlay">
+          <Loader2 size={17} className="spin" />
+          <span>Reflowing pages…</span>
+        </div>
+      )}
 
       {activeOverflow && (
         <div className="overflow-banner" role="status">
@@ -193,17 +272,7 @@ export function PreviewStage({
           {result && <PageNavigator currentPage={currentPage} pageCount={result.pageCount} onChange={onPageChange} />}
         </div>
         <div className="preview-toolbar-right">
-          <div className="zoom-control" role="group" aria-label="Zoom">
-            <button type="button" className="zoom-btn" onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.1).toFixed(2))))} aria-label="Zoom out" title="Zoom out">
-              <Minus size={16} />
-            </button>
-            <button type="button" className="zoom-value" onClick={() => setZoom(1)} title="Fit to window">
-              {Math.round(scale * 100)}%
-            </button>
-            <button type="button" className="zoom-btn" onClick={() => setZoom((z) => Math.min(2.4, Number((z + 0.1).toFixed(2))))} aria-label="Zoom in" title="Zoom in">
-              <Plus size={16} />
-            </button>
-          </div>
+          <ZoomControl scale={scale} pageScale={pageScale} setZoom={setZoom} />
         </div>
       </div>
     </section>
