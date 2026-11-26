@@ -19,7 +19,7 @@ function styleVars(settings, { columns, typeScale }) {
     '--label-font': `${settings.lyricsSize * typeScale * 0.7}px`,
     '--chord-row-h': `${chordPx}px`,
     '--lyric-row-h': `${lyricPx * settings.lineHeight}px`,
-    '--font-body': FONT_STACKS[settings.fontFamily]?.stack ?? FONT_STACKS.inter.stack,
+    '--font-body': FONT_STACKS.inter.stack,
     '--heading-color': settings.headingColor,
     '--lyrics-color': settings.lyricsColor,
     '--chords-color': settings.chordsColor,

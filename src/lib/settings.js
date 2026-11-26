@@ -13,16 +13,6 @@ export const FONT_STACKS = {
     sample: 'Ag',
     stack: '"Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   },
-  lora: {
-    label: 'Lora',
-    sample: 'Ag',
-    stack: '"Lora Variable", Lora, Georgia, "Times New Roman", serif',
-  },
-  mono: {
-    label: 'Mono',
-    sample: 'Ag',
-    stack: '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace',
-  },
 };
 
 /**
@@ -216,7 +206,7 @@ export function loadSettings() {
     if (!PAPER_SIZES[merged.paper]) merged.paper = DEFAULT_SETTINGS.paper;
     if (!['portrait', 'landscape'].includes(merged.orientation)) merged.orientation = 'landscape';
     if (!['auto', 'one', 'two'].includes(merged.columns)) merged.columns = 'auto';
-    if (!FONT_STACKS[merged.fontFamily]) merged.fontFamily = 'inter';
+    merged.fontFamily = 'inter';
     if (merged.songOrder === 'original') merged.songOrder = 'title';
     if (!['manual', 'title', 'author'].includes(merged.songOrder)) {
       merged.songOrder = DEFAULT_SETTINGS.songOrder;

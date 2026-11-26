@@ -21,24 +21,6 @@ const PDF_FONT_FAMILIES = {
       bolditalic: '/fonts/LiberationSans-BoldItalic.ttf',
     },
   },
-  lora: {
-    name: 'LiberationSerif',
-    fallback: 'times',
-    files: {
-      normal: '/fonts/LiberationSerif-Regular.ttf',
-      bold: '/fonts/LiberationSerif-Bold.ttf',
-      bolditalic: '/fonts/LiberationSerif-BoldItalic.ttf',
-    },
-  },
-  mono: {
-    name: 'LiberationMono',
-    fallback: 'courier',
-    files: {
-      normal: '/fonts/LiberationMono-Regular.ttf',
-      bold: '/fonts/LiberationMono-Bold.ttf',
-      bolditalic: '/fonts/LiberationMono-BoldItalic.ttf',
-    },
-  },
 };
 
 const fontBase64Cache = new Map();

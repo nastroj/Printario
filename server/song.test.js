@@ -234,7 +234,7 @@ test('loadSettings migrates legacy v2 7mm default margins to 6/5/6/12mm', () => 
   try {
     const migrated = loadSettings();
     assert.deepEqual(migrated.margins, { top: 6, right: 5, bottom: 6, left: 12 });
-    assert.equal(migrated.fontFamily, 'lora');
+    assert.equal(migrated.fontFamily, 'inter');
     assert.equal(migrated.bookMode, false);
     assert.equal(migrated.showSectionLines, true);
     assert.equal(migrated.sectionLabelPosition, 'after');
@@ -267,3 +267,63 @@ test('section line and label position settings normalize cleanly', () => {
     globalThis.localStorage = prevStorage;
   }
 });
+
+test('paginateBook flags songs that overflow past the bottom margin and clears when font sizes drop', () => {
+  const shortSections = [
+    {
+      title: '1.',
+      expandable: false,
+      tokens: [
+        { type: 1, content: 'C' },
+        { type: 0, content: 'Short line one' },
+        { type: 6 },
+      ],
+    },
+  ];
+  const longSections = Array.from({ length: 14 }, (_, idx) => ({
+    title: `${idx + 1}.`,
+    expandable: false,
+    tokens: [
+      { type: 1, content: 'Am' },
+      { type: 0, content: `Verse ${idx + 1} line one with chords` },
+      { type: 6 },
+      { type: 1, content: 'G' },
+      { type: 0, content: `Verse ${idx + 1} line two continuing` },
+      { type: 6 },
+      { type: 1, content: 'F' },
+      { type: 0, content: `Verse ${idx + 1} line three near end` },
+      { type: 6 },
+      { type: 1, content: 'E' },
+      { type: 0, content: `Verse ${idx + 1} final cadence` },
+      { type: 6 },
+    ],
+  }));
+
+  const book = buildBookModel({
+    token: 'overflow-test',
+    name: 'Overflow Book',
+    songs: [
+      { id: 1, name: 'Short Song', sections: shortSections },
+      { id: 2, name: 'Endless Ballad', sections: longSections },
+    ],
+  });
+
+  const defaultResult = paginateBook(book, DEFAULT_SETTINGS);
+  assert.equal(defaultResult.overflowCount, 1);
+  assert.equal(defaultResult.overflowBySongIndex[0].overflows, false);
+  assert.equal(defaultResult.overflowBySongIndex[1].overflows, true);
+  assert.ok(defaultResult.overflowBySongIndex[1].overflowLines >= 1);
+
+  const endlessPage = defaultResult.pages.find((page) => page.type === 'song' && page.songIndex === 1);
+  assert.equal(endlessPage?.overflow?.overflows, true);
+
+  const smallerResult = paginateBook(book, {
+    ...DEFAULT_SETTINGS,
+    lyricsSize: 6.5,
+    chordsSize: 6.5,
+    margins: { top: 2, right: 3, bottom: 2, left: 6 },
+  });
+  assert.equal(smallerResult.overflowCount, 0);
+  assert.equal(smallerResult.overflowBySongIndex[1].overflows, false);
+});
+

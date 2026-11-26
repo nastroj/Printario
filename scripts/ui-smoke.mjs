@@ -96,19 +96,24 @@ const fixtureSongbook = {
       capo: 0,
       tonalKey: 'C',
       notation: 'english',
-      sections: [
-        {
-          title: '1.',
-          expandable: false,
-          tokens: [
-            { type: 1, content: 'C' },
-            { type: 0, content: 'Folded from an old ' },
-            { type: 1, content: 'F' },
-            { type: 0, content: 'letter' },
-            { type: 6 },
-          ],
-        },
-      ],
+      sections: Array.from({ length: 14 }, (_, idx) => ({
+        title: `${idx + 1}.`,
+        expandable: false,
+        tokens: [
+          { type: 1, content: 'C' },
+          { type: 0, content: `Folded from an old letter verse ${idx + 1}` },
+          { type: 6 },
+          { type: 1, content: 'F' },
+          { type: 0, content: `Drifting down the quiet river bend ${idx + 1}` },
+          { type: 6 },
+          { type: 1, content: 'G' },
+          { type: 0, content: `Carrying a tune past the reeds ${idx + 1}` },
+          { type: 6 },
+          { type: 1, content: 'C' },
+          { type: 0, content: `Until evening falls on shore ${idx + 1}` },
+          { type: 6 },
+        ],
+      })),
     },
   ],
 };
@@ -187,6 +192,49 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 100));
   const activeTitle = document.querySelector('.song-title')?.textContent;
   if (!activeTitle || activeTitle === title) throw new Error('Song navigation did not change the page');
+
+  // Verify toolbar overflow count badge, Contents drawer overflow indicator/filter, and preview overflow banner.
+  const warnBadge = document.querySelector('.toolbar-warn-badge');
+  if (!warnBadge || warnBadge.textContent.trim() !== '1') {
+    throw new Error(`Expected toolbar overflow badge "1", got "${warnBadge?.textContent}"`);
+  }
+
+  document.querySelector('.toolbar-button')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await waitFor('.song-drawer');
+  const drawerAlert = document.querySelector('.drawer-overflow-alert');
+  if (!drawerAlert || !drawerAlert.textContent.includes('1 song clips')) {
+    throw new Error('Contents drawer overflow summary alert missing');
+  }
+  const drawerBadges = document.querySelectorAll('.drawer-overflow-badge');
+  if (drawerBadges.length !== 1) {
+    throw new Error(`Expected 1 clipping badge in Contents drawer, got ${drawerBadges.length}`);
+  }
+  const drawerFooterCloseBtn = document.querySelector('.drawer-foot-actions button[aria-label="Close contents"]');
+  if (!drawerFooterCloseBtn) throw new Error('Contents drawer footer close button missing');
+  drawerFooterCloseBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  if (document.querySelector('.song-drawer')) {
+    throw new Error('Contents drawer footer close button did not close drawer');
+  }
+  document.querySelector('.toolbar-button')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await waitFor('.song-drawer');
+  document.querySelector('.drawer-overflow-filter')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  const filteredRows = document.querySelectorAll('.drawer-row');
+  if (filteredRows.length !== 1 || !filteredRows[0].textContent.includes('Paper Boat')) {
+    throw new Error('Clipping-only filter should narrow Contents list to Paper Boat');
+  }
+  filteredRows[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await waitFor('.overflow-banner');
+  const overflowBannerText = document.querySelector('.overflow-banner')?.textContent || '';
+  if (!overflowBannerText.includes('clips past the bottom margin')) {
+    throw new Error(`Unexpected overflow banner text: ${overflowBannerText}`);
+  }
+  document.querySelector('.overflow-banner-btn')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await waitFor('.settings-sheet-layer.is-open');
+  document.querySelector('.settings-foot-actions button[aria-label="Close settings"]')
+    ?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 60));
 
   // Open the settings sheet, verify margin presets are absent, test Book mode, then change paper size to A5.
   document.querySelector('.settings-toggle-button')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
@@ -295,6 +343,9 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 40));
   if (!crossStyleBtn.classList.contains('is-active')) {
     throw new Error('Hairline crosses crop mark style did not activate');
+  }
+  if (document.querySelector('.pdf-export-dialog .confirm-cancel-btn')) {
+    throw new Error('PDF export modal should not render a Cancel button');
   }
   document.querySelector('.pdf-export-dialog button[aria-label="Close export dialog"]')
     ?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));

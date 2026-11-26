@@ -494,6 +494,10 @@ export default function App() {
               setSettingsOpen(false);
               setDrawerOpen(true);
             }}
+            onOpenSettings={() => {
+              setDrawerOpen(false);
+              setSettingsOpen(true);
+            }}
             onToggleSettings={() => {
               setDrawerOpen(false);
               setSettingsOpen((open) => !open);
@@ -512,10 +516,6 @@ export default function App() {
           result={result}
           currentPage={currentPage}
           onSelect={setCurrentPage}
-          onPrint={() => {
-            setDrawerOpen(false);
-            handlePrint();
-          }}
         />
 
         <div

@@ -3,11 +3,13 @@ import { ChevronDown, Minus, Plus } from 'lucide-react';
 import { normalizeHex } from '../lib/color.js';
 import { ColorPickerDialog } from './ColorPickerDialog.jsx';
 
-export function PanelSection({ icon: Icon, title, hint, children, defaultOpen = true }) {
-  const [open, setOpen] = useState(defaultOpen);
+export function PanelSection({ icon: Icon, title, hint, children, defaultOpen = true, open: controlledOpen, onToggle }) {
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const toggle = onToggle ?? (() => setInternalOpen((v) => !v));
   return (
     <section className={`panel-section${open ? ' is-open' : ''}`}>
-      <button type="button" className="panel-section-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+      <button type="button" className="panel-section-head" onClick={toggle} aria-expanded={open}>
         <span className="panel-section-icon">{Icon && <Icon size={15} />}</span>
         <span className="panel-section-title">{title}</span>
         <ChevronDown size={15} className="panel-chevron" />

@@ -438,10 +438,10 @@ export function PdfExportDialog({
         className="confirm-dialog pdf-export-dialog"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="pdf-export-head">
-          <div className="pdf-export-head-left">
-            <span className="confirm-icon export-icon" aria-hidden="true">
-              {isPro ? <Scissors size={18} /> : <Printer size={18} />}
+        <div className="pdf-export-head modal-head">
+          <div className="modal-head-title">
+            <span className="modal-head-icon" aria-hidden="true">
+              <Download size={16} />
             </span>
             <div>
               <span className="settings-sheet-kicker">
@@ -710,23 +710,14 @@ export function PdfExportDialog({
               ? `${sheets.length} ${sheets.length === 1 ? 'sheet' : 'sheets'} · ${layout ? `${Math.round(layout.sheetWidthMm)} × ${Math.round(layout.sheetHeightMm)} mm` : ''}`
               : `${pageCount} ${pageCount === 1 ? 'page' : 'pages'} · ${trimW} × ${trimH} mm`}
           </div>
-          <div className="confirm-actions">
-            <button
-              type="button"
-              className="confirm-cancel-btn"
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="primary-button pdf-download-submit"
-              onClick={() => onExport(pdfOpts)}
-            >
-              <Download size={16} />
-              <span>{isPro ? 'Download Press PDF' : 'Download PDF'}</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            className="primary-button pdf-download-submit"
+            onClick={() => onExport(pdfOpts)}
+          >
+            <Download size={16} />
+            <span>{isPro ? 'Download Press PDF' : 'Download PDF'}</span>
+          </button>
         </div>
       </div>
     </div>

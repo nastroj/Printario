@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Minus, Plus,
+  AlertTriangle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Minus, Plus,
   ListMusic, Printer, Settings2, Loader2,
 } from 'lucide-react';
 import { PaperPage } from './PaperPage.jsx';
@@ -51,6 +51,7 @@ export function PreviewStage({
   currentPage,
   onPageChange,
   onOpenContents,
+  onOpenSettings,
   onToggleSettings,
   settingsOpen,
   onPrint,
@@ -61,6 +62,7 @@ export function PreviewStage({
   const stageRef = useRef(null);
   const [stageSize, setStageSize] = useState({ width: 900, height: 700 });
   const [zoom, setZoom] = useState(1);
+  const [domOverflow, setDomOverflow] = useState(false);
 
   useLayoutEffect(() => {
     const el = stageRef.current;
@@ -104,6 +106,26 @@ export function PreviewStage({
   const page = result?.pages?.[currentPage];
   const geometry = result?.geometry;
   const appliedSettings = result?.settings ?? settings;
+
+  useLayoutEffect(() => {
+    if (page?.type !== 'song') {
+      setDomOverflow(false);
+      return;
+    }
+    const sheet = stageRef.current?.querySelector('.song-sheet');
+    if (!sheet || !sheet.clientHeight || !sheet.clientWidth) {
+      setDomOverflow(false);
+      return;
+    }
+    setDomOverflow(
+      sheet.scrollWidth > sheet.clientWidth + 2 || sheet.scrollHeight > sheet.clientHeight + 2,
+    );
+  }, [page, geometry, appliedSettings]);
+
+  const activeOverflow = page?.type === 'song' && Boolean(page.overflow?.overflows || domOverflow);
+  const activeOverflowLines = page?.overflow?.overflowLines ?? 0;
+  const totalOverflowCount = result?.overflowCount ?? 0;
+
   const pageScale = geometry
     ? Math.min(
       Math.max(0.2, stageSize.width / geometry.widthPx),
@@ -156,13 +178,43 @@ export function PreviewStage({
         )}
       </div>
 
+      {activeOverflow && (
+        <div className="overflow-banner" role="status">
+          <AlertTriangle size={15} className="overflow-banner-icon" aria-hidden="true" />
+          <span className="overflow-banner-text">
+            {activeOverflowLines > 0
+              ? `This song clips past the bottom margin (~${activeOverflowLines} ${activeOverflowLines === 1 ? 'line' : 'lines'}). Lower font size or margins.`
+              : 'This song clips past the bottom margin. Lower font size or margins.'}
+          </span>
+          {onOpenSettings && (
+            <button type="button" className="overflow-banner-btn" onClick={onOpenSettings}>
+              Adjust settings
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="preview-toolbar">
         <div className="preview-toolbar-left">
           {result && <PageNavigator currentPage={currentPage} pageCount={result.pageCount} onChange={onPageChange} />}
         </div>
         <div className="preview-toolbar-right">
-          <button type="button" className="toolbar-button" onClick={onOpenContents}>
-            <ListMusic size={16} /> <span>Contents</span>
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={onOpenContents}
+            title={totalOverflowCount > 0
+              ? `${totalOverflowCount} ${totalOverflowCount === 1 ? 'song clips' : 'songs clip'} past the bottom margin`
+              : undefined}
+          >
+            <ListMusic size={16} />
+            <span>Contents</span>
+            {totalOverflowCount > 0 && (
+              <span className="toolbar-warn-badge" aria-label={`${totalOverflowCount} songs clip`}>
+                <AlertTriangle size={10} strokeWidth={2.4} aria-hidden="true" />
+                {totalOverflowCount}
+              </span>
+            )}
           </button>
           <button
             type="button"

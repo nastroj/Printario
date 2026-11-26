@@ -100,11 +100,7 @@ export function PaperPage({ page, book, settings, geometry, className = '' }) {
     '--heading-color': settings.headingColor,
     '--lyrics-color': settings.lyricsColor,
     '--chords-color': settings.chordsColor,
-    '--font-body': settings.fontFamily === 'lora'
-      ? '"Lora Variable", Lora, Georgia, serif'
-      : settings.fontFamily === 'mono'
-        ? 'Consolas, "Liberation Mono", monospace'
-        : '"Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif',
+    '--font-body': '"Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif',
   };
 
   return (

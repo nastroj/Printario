@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Copy, RotateCcw, X } from 'lucide-react';
+import { Check, Copy, Palette, RotateCcw, X } from 'lucide-react';
 import {
   PRINT_SWATCHES,
   clampNum,
@@ -288,10 +288,15 @@ export function ColorPickerDialog({
           backdropPressRef.current = false;
         }}
       >
-        <div className="cp-head">
-          <div className="cp-title-wrap">
-            <h3 id="color-picker-modal-title">{title}</h3>
-            <p>Pick a color or enter HEX / RGB / HSV</p>
+        <div className="cp-head modal-head">
+          <div className="modal-head-title">
+            <span className="modal-head-icon" aria-hidden="true">
+              <Palette size={16} />
+            </span>
+            <div className="cp-title-wrap">
+              <h3 id="color-picker-modal-title">{title}</h3>
+              <p>Pick a color or enter HEX / RGB / HSV</p>
+            </div>
           </div>
           <button
             type="button"
