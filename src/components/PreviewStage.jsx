@@ -130,6 +130,7 @@ export function PreviewStage({
   const [stageSize, setStageSize] = useState({ width: 900, height: 700 });
   const [zoom, setZoom] = useState(1);
   const [domOverflow, setDomOverflow] = useState(false);
+  const sheetRef = useRef(null);
 
   useLayoutEffect(() => {
     const el = stageRef.current;
@@ -180,10 +181,12 @@ export function PreviewStage({
 
   useLayoutEffect(() => {
     if (page?.type !== 'song') {
+      sheetRef.current = null;
       setDomOverflow(false);
       return;
     }
     const sheet = stageRef.current?.querySelector('.song-sheet');
+    sheetRef.current = sheet;
     if (!sheet || !sheet.clientHeight || !sheet.clientWidth) {
       setDomOverflow(false);
       return;

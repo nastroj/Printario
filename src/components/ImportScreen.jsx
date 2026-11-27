@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowRight, ArrowUpRight, BookOpen, Check, Clock3, FileText,
@@ -32,13 +32,19 @@ function RecentRow({ item, onOpen, onRequestRemove, disabled }) {
 }
 
 function ConfirmRemoveDialog({ item, onCancel, onConfirm }) {
+  const dialogRef = useRef(null);
   useEffect(() => {
     if (!item) return undefined;
+    const previous = document.activeElement;
+    dialogRef.current?.focus();
     const onKeyDown = (event) => {
       if (event.key === 'Escape') onCancel();
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (previous && typeof previous.focus === 'function') previous.focus();
+    };
   }, [item, onCancel]);
 
   if (!item) return null;
@@ -52,7 +58,7 @@ function ConfirmRemoveDialog({ item, onCancel, onConfirm }) {
       data-confirm-remove-modal="true"
     >
       <div className="confirm-backdrop" onClick={onCancel} aria-hidden="true" />
-      <div className="confirm-dialog">
+      <div className="confirm-dialog" ref={dialogRef} tabIndex={-1}>
         <div className="confirm-head">
           <span className="confirm-icon" aria-hidden="true">
             <Trash2 size={18} />

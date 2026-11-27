@@ -16,12 +16,12 @@ function readCliFlag(name) {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const IS_PROD = process.env.NODE_ENV === 'production';
-const PORT = Number(readCliFlag('--port') || process.env.PORT || 3000);
+const PORT = Number(readCliFlag('--port') || process.env.PORT || 5173);
 const HOST = readCliFlag('--host') || process.env.HOST || '0.0.0.0';
 
 const app = express();
 app.disable('x-powered-by');
-app.set('trust proxy', 1);
+app.set('trust proxy', process.env.TRUST_PROXY === '1' ? 1 : false);
 app.use(compression());
 app.use(express.json({ limit: '16kb' }));
 app.use((req, res, next) => {
@@ -87,6 +87,12 @@ const rate = new Map();
 function rateLimit(req, res, next) {
   const key = req.ip || 'unknown';
   const now = Date.now();
+  // Prune expired entries so the store cannot grow without bound.
+  if (rate.size > 1000) {
+    for (const [storedKey, storedEntry] of rate) {
+      if (now - storedEntry.start > 60_000) rate.delete(storedKey);
+    }
+  }
   const entry = rate.get(key);
   if (!entry || now - entry.start > 60_000) {
     rate.set(key, { start: now, count: 1 });
@@ -109,7 +115,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, version: '1.0.0' });
 });
 
-app.get('/api/qr/:token', async (req, res, next) => {
+app.get('/api/qr/:token', rateLimit, async (req, res, next) => {
   try {
     const svg = await fetchSongbookQrSvg(req.params.token);
     res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');

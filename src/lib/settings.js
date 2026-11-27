@@ -217,7 +217,7 @@ export function loadSettings() {
     if (!['portrait', 'landscape'].includes(merged.orientation)) merged.orientation = 'landscape';
     if (!['auto', 'one', 'two'].includes(merged.columns)) merged.columns = 'auto';
     merged.fontFamily = 'inter';
-    if (merged.songOrder === 'original') merged.songOrder = 'title';
+    if (merged.songOrder === 'original') merged.songOrder = 'manual';
     if (!['manual', 'title', 'author'].includes(merged.songOrder)) {
       merged.songOrder = DEFAULT_SETTINGS.songOrder;
     }

@@ -1,14 +1,15 @@
+import { useMemo } from 'react';
 import { FileText } from 'lucide-react';
 import { getColumnCount, getPageMargins } from '../lib/settings.js';
 import { SongPageContent } from './SongView.jsx';
 
 function CoverPage({ book, columns }) {
   const songCount = book.songs?.length ?? 0;
-  const printedOn = new Intl.DateTimeFormat('en-US', {
+  const printedOn = useMemo(() => new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date());
+  }).format(new Date()), []);
   const sourceUrl = typeof book.sourceUrl === 'string' ? book.sourceUrl : '';
   const sourceLabel = sourceUrl.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
   const qrUrl = !book.singleSong && book.token

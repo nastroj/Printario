@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Download, FileText, LayoutList, Palette, RotateCcw, Settings2, Type, X,
 } from 'lucide-react';
@@ -22,6 +22,37 @@ export function SettingsPanel({
   const typeScale = getTypeScale(layoutGeometry, columns);
   const effective = (value) => `${(value * typeScale).toFixed(1)} px`;
 
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return undefined;
+    const previous = document.activeElement;
+    panel.focus();
+    const focusable = () => Array.from(panel.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )).filter((node) => !node.disabled);
+    const onKeyDown = (event) => {
+      if (event.key !== 'Tab') return;
+      const nodes = focusable();
+      if (!nodes.length) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    panel.addEventListener('keydown', onKeyDown);
+    return () => {
+      panel.removeEventListener('keydown', onKeyDown);
+      if (previous && typeof previous.focus === 'function') previous.focus();
+    };
+  }, []);
+
   const [sectionsOpen, setSectionsOpen] = useState({
     pageSetup: true,
     typography: true,
@@ -44,7 +75,7 @@ export function SettingsPanel({
   };
 
   return (
-    <aside className="settings-panel" role="dialog" aria-modal="true" aria-label="Settings">
+    <aside ref={panelRef} tabIndex={-1} className="settings-panel" role="dialog" aria-modal="true" aria-label="Settings">
       <div className="sheet-handle" aria-hidden="true" />
       <div className="settings-sheet-head modal-head">
         <div className="modal-head-title">

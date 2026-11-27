@@ -236,6 +236,20 @@ async function fetchText(url, { accept = 'text/html,application/xhtml+xml,applic
       throw error;
     }
 
+    const finalHost = (() => {
+      try {
+        return new URL(response.url).hostname.toLowerCase().replace(/^www\./, '');
+      } catch {
+        return '';
+      }
+    })();
+    if (!['kytario.com', 'kytario.cz'].includes(finalHost)) {
+      throw new ImportError('Kytario redirected to an unexpected host.', {
+        code: 'UPSTREAM_REDIRECT',
+        status: 502,
+      });
+    }
+
     const declaredLength = Number(response.headers.get('content-length') ?? 0);
     if (declaredLength > MAX_RESPONSE_BYTES) {
       throw new ImportError('That songbook is too large to import.', {
@@ -403,7 +417,7 @@ function parseSongbookMeta(html, token) {
 function normaliseToken(token) {
   if (!token || typeof token !== 'object') return null;
   const type = asInt(token.type, -1);
-  if (type < 0 || type > 8) return null;
+  if (type < 0 || type > 7) return null;
   const content = type === 4 || type === 5 || type === 3
     ? asInt(token.content, type === 3 ? 1 : 2)
     : type === 0

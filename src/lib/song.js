@@ -220,19 +220,6 @@ export function buildSongModel(song) {
   };
 }
 
-export function displayAuthor(song) {
-  return song.author || song.interpreter || null;
-}
-
-export function songMetaParts(song) {
-  const parts = [];
-  if (displayAuthor(song)) parts.push(displayAuthor(song));
-  if (song.tonalKey) parts.push(song.tonalKey);
-  if (song.capo > 0) parts.push(`capo ${song.capo}`);
-  if (song.tempo) parts.push(song.tempo);
-  return parts;
-}
-
 export function buildBookModel(songbook) {
   const songs = (songbook.songs ?? []).map((song, index) => ({
     ...song,
@@ -240,6 +227,8 @@ export function buildBookModel(songbook) {
   }));
   return { ...songbook, songs: songs.map(buildSongModel) };
 }
+
+export const CHORUS_TITLE_RE = /ref|cho/i;
 
 /** Exported for unit tests. */
 export const __test = { buildSection, buildNamedLines, buildInlineLines, SPACER_EM };

@@ -175,7 +175,18 @@ export function RangeControl({ label, value, min, max, step = 1, unit = '', onCh
 
 export function Toggle({ label, hint, checked, onChange }) {
   return (
-    <div className="toggle-row" onClick={() => onChange(!checked)}>
+    <div
+      className="toggle-row"
+      role="button"
+      tabIndex={0}
+      onClick={() => onChange(!checked)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onChange(!checked);
+        }
+      }}
+    >
       <span className="toggle-text">
         <span className="toggle-label">{label}</span>
         {hint && <span className="toggle-hint">{hint}</span>}
@@ -260,7 +271,15 @@ export function ColorControl({
   return (
     <div
       className="color-card"
+      role="button"
+      tabIndex={0}
       onClick={() => setOpen(true)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          setOpen(true);
+        }
+      }}
       title={hint || `${label} (${hexLabel})`}
     >
       <div className="color-card-text">

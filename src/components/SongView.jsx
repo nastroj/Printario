@@ -1,11 +1,10 @@
 import { useLayoutEffect, useRef } from 'react';
+import { CHORUS_TITLE_RE } from '../lib/song.js';
 import {
   FONT_STACKS, KYTARIO_PALETTE, getColumnCount, getTypeScale,
 } from '../lib/settings.js';
 
 const NBSP = '\u00a0';
-const CHORUS_TITLE_RE = /ref|cho/i;
-
 function styleVars(settings, { columns, typeScale }) {
   const lyricPx = settings.lyricsSize * typeScale;
   const chordPx = settings.chordsSize * typeScale;

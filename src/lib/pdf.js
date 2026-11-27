@@ -5,10 +5,10 @@ import {
 import {
   buildSheetSequence, computeSheetLayout, normalizePdfExportOptions,
 } from './imposition.js';
+import { CHORUS_TITLE_RE } from './song.js';
 
 const PX_TO_MM = 25.4 / 96;
 const PX_TO_PT = 0.75;
-const CHORUS_TITLE_RE = /ref|cho/i;
 const NBSP = '\u00a0';
 
 const PDF_FONT_FAMILIES = {
