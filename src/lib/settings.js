@@ -305,3 +305,32 @@ export function sortSongs(songs, order) {
   }
   return songs;
 }
+
+export function sortDrawerEntries(items, sortBy = 'title', direction = 'asc') {
+  const dir = direction === 'desc' ? -1 : 1;
+  return [...items].sort((a, b) => {
+    const numA = a.number ?? (a.index ?? 0) + 1;
+    const numB = b.number ?? (b.index ?? 0) + 1;
+    const cmpNumber = numA - numB;
+
+    if (sortBy === 'number') {
+      return cmpNumber * dir;
+    }
+
+    const nameA = String(a.name || '');
+    const nameB = String(b.name || '');
+    const cmpTitleAsc = nameA.localeCompare(nameB, 'cs', { sensitivity: 'base' });
+
+    if (sortBy === 'author') {
+      const authorA = String(a.author || '').trim();
+      const authorB = String(b.author || '').trim();
+      if (!authorA && !authorB) return cmpTitleAsc || cmpNumber;
+      if (!authorA) return 1;
+      if (!authorB) return -1;
+      const cmpAuthor = authorA.localeCompare(authorB, 'cs', { sensitivity: 'base' }) * dir;
+      return cmpAuthor || cmpTitleAsc || cmpNumber;
+    }
+
+    return (cmpTitleAsc * dir) || cmpNumber;
+  });
+}

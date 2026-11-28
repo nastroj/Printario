@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Download, FileText, Printer, Scissors, X,
+  Check, Download, X,
 } from 'lucide-react';
 import {
   CROP_MARK_STYLES,
@@ -11,6 +11,7 @@ import {
   normalizePdfExportOptions,
 } from '../lib/imposition.js';
 import { Segmented, SelectControl, StepperControl } from './Controls.jsx';
+import { PageSetupFields } from './PageSetupFields.jsx';
 
 function SheetPreview({
   geometry, pdfOpts, layout, firstSheetSlots, paperTint,
@@ -370,11 +371,14 @@ export function PdfExportDialog({
   isOpen,
   result,
   settings,
+  reflowing = false,
+  onUpdateSettings,
+  onSetMargin,
   onChangePdfOptions,
   onExport,
   onClose,
 }) {
-  const backdropPressRef = useRef(false);
+  const panelRef = useRef(null);
   const pdfOpts = useMemo(
     () => normalizePdfExportOptions(settings?.pdfExport),
     [settings?.pdfExport],
@@ -393,20 +397,50 @@ export function PdfExportDialog({
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const panel = panelRef.current;
+    if (!panel) return undefined;
+    const previous = document.activeElement;
+    panel.focus();
+    const focusable = () => Array.from(panel.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )).filter((node) => !node.disabled && getComputedStyle(node).display !== 'none');
+    const onKeyDown = (event) => {
+      if (event.key !== 'Tab') return;
+      const nodes = focusable();
+      if (!nodes.length) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    panel.addEventListener('keydown', onKeyDown);
+    return () => {
+      panel.removeEventListener('keydown', onKeyDown);
+      if (previous && typeof previous.focus === 'function') previous.focus();
+    };
+  }, [isOpen]);
+
   const geometry = result?.geometry;
   const pageCount = result?.pageCount ?? 0;
 
   const layout = useMemo(() => {
-    if (!geometry || pdfOpts.mode !== 'pro') return null;
+    if (!isOpen || !geometry || pdfOpts.mode !== 'pro') return null;
     return computeSheetLayout(geometry.widthMm, geometry.heightMm, pdfOpts);
-  }, [geometry, pdfOpts]);
+  }, [isOpen, geometry, pdfOpts]);
 
   const sheets = useMemo(() => {
-    if (!pageCount || pdfOpts.mode !== 'pro') return [];
+    if (!isOpen || !pageCount || pdfOpts.mode !== 'pro') return [];
     return buildSheetSequence(pageCount, pdfOpts);
-  }, [pageCount, pdfOpts]);
+  }, [isOpen, pageCount, pdfOpts]);
 
-  if (!isOpen || !result) return null;
+  if (!result || !geometry) return null;
 
   const updateField = (patch) => {
     onChangePdfOptions(normalizePdfExportOptions({ ...pdfOpts, ...patch }));
@@ -415,30 +449,30 @@ export function PdfExportDialog({
   const isPro = pdfOpts.mode === 'pro';
   const trimW = Number(geometry.widthMm.toFixed(1));
   const trimH = Number(geometry.heightMm.toFixed(1));
-  const pageOrient = geometry.landscape ? 'Landscape' : 'Portrait';
 
   const dialog = (
     <div
-      className="confirm-layer pdf-export-layer"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="pdf-export-title"
-      onPointerDown={(event) => {
-        backdropPressRef.current = event.target === event.currentTarget;
-      }}
-      onClick={(event) => {
-        if (backdropPressRef.current && event.target === event.currentTarget) {
-          onClose();
-        }
-        backdropPressRef.current = false;
-      }}
+      className={`settings-sheet-layer pdf-export-layer${isOpen ? ' is-open' : ''}`}
+      aria-hidden={!isOpen}
+      inert={!isOpen}
     >
-      <div className="confirm-backdrop" />
-      <div
-        className="confirm-dialog pdf-export-dialog"
-        onClick={(event) => event.stopPropagation()}
+      <button
+        type="button"
+        className="drawer-backdrop"
+        onClick={onClose}
+        aria-label="Close export dialog"
+        tabIndex={isOpen ? 0 : -1}
+      />
+      <aside
+        ref={panelRef}
+        tabIndex={-1}
+        className="settings-panel pdf-export-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pdf-export-title"
       >
-        <div className="pdf-export-head modal-head">
+        <div className="sheet-handle" aria-hidden="true" />
+        <div className="settings-sheet-head modal-head pdf-export-head">
           <div className="modal-head-title">
             <span className="modal-head-icon" aria-hidden="true">
               <Download size={16} />
@@ -455,7 +489,7 @@ export function PdfExportDialog({
           </button>
         </div>
 
-        <div className="pdf-export-body">
+        <div className="settings-scroll pdf-export-body">
           <Segmented
             value={pdfOpts.mode}
             columns={2}
@@ -468,20 +502,13 @@ export function PdfExportDialog({
           />
 
           {!isPro ? (
-            <div className="pdf-standard-summary">
-              <div className="pdf-standard-row">
-                <FileText size={16} />
-                <div>
-                  <strong>{settings.paper} {pageOrient} ({trimW} × {trimH} mm)</strong>
-                  <p>
-                    {pageCount} vector {pageCount === 1 ? 'page' : 'pages'} at exact trim size with embedded fonts.
-                  </p>
-                </div>
-              </div>
-              <p className="control-note">
-                Need two A4 pages on A3, folded booklet spreads, bleed, or crop marks? Choose{' '}
-                <strong>Print shop (Pro)</strong> above.
-              </p>
+            <div className="pdf-standard-setup">
+              <PageSetupFields
+                settings={settings}
+                update={onUpdateSettings}
+                setMargin={onSetMargin}
+                showPrintNote={false}
+              />
             </div>
           ) : (
             <>
@@ -707,16 +734,29 @@ export function PdfExportDialog({
               ? ` · ${sheets.length} ${sheets.length === 1 ? 'sheet' : 'sheets'}${layout ? ` · ${Math.round(layout.sheetWidthMm)} × ${Math.round(layout.sheetHeightMm)} mm` : ''}`
               : ` · ${trimW} × ${trimH} mm`}
           </div>
-          <button
-            type="button"
-            className="primary-button pdf-download-submit"
-            onClick={() => onExport(pdfOpts)}
-          >
-            <Download size={16} />
-            <span>{isPro ? 'Download Press PDF' : 'Download PDF'}</span>
-          </button>
+          <div className="pdf-export-foot-actions">
+            <button
+              type="button"
+              className="primary-button pdf-download-submit"
+              disabled={reflowing}
+              onClick={() => onExport(pdfOpts)}
+            >
+              <Download size={16} />
+              <span>{reflowing ? 'Updating pages…' : isPro ? 'Download Press PDF' : 'Download PDF'}</span>
+            </button>
+            <div className="pdf-export-bottom-close">
+              <button
+                type="button"
+                className="icon-button"
+                onClick={onClose}
+                aria-label="Close export dialog"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      </aside>
     </div>
   );
 

@@ -125,6 +125,8 @@ test('exportSongbookPdf generates compact vector PDF with exact page dimensions 
 
     assert.ok(progressEvents.length >= 2);
     assert.equal(progressEvents[progressEvents.length - 1].current, 122);
+    assert.equal(typeof progressEvents[0].elapsedMs, 'number');
+    assert.ok(progressEvents[progressEvents.length - 1].elapsedMs >= 0);
 
     // Verify book mode exports cleanly with exact A4 landscape dimensions
     const bookResult = paginateBook(book, {
@@ -347,4 +349,43 @@ test('imposition layout and pro PDF export support 2-up A4 on A3, SRA3, and book
     if (fs.existsSync(sra3BookletPath)) fs.unlinkSync(sra3BookletPath);
     globalThis.fetch = prevFetch;
   }
+});
+
+test('calculatePdfEta and formatPdfEta estimate and format remaining PDF generation time', async () => {
+  const { calculatePdfEta, formatPdfEta } = await import('../src/lib/pdfEta.js');
+
+  assert.equal(formatPdfEta(null), 'Estimating…');
+  assert.equal(formatPdfEta(450), '< 1s left');
+  assert.equal(formatPdfEta(4200), '~5s left');
+  assert.equal(formatPdfEta(60000), '~1m left');
+  assert.equal(formatPdfEta(74200), '~1m 15s left');
+
+  assert.equal(
+    calculatePdfEta({ current: 0, total: 100, elapsedMs: 0 }).label,
+    'Estimating…',
+  );
+  assert.equal(
+    calculatePdfEta({ current: 1, total: 100, elapsedMs: 5 }).label,
+    'Estimating…',
+  );
+  assert.equal(
+    calculatePdfEta({ current: 2, total: 100, elapsedMs: 80 }).label,
+    'Estimating…',
+  );
+
+  // 10 completed pages in 1000ms => 100ms/page, 90 remaining => 9000ms => ~9s left
+  const sample1 = calculatePdfEta({ current: 11, total: 100, elapsedMs: 1000 });
+  assert.equal(Math.round(sample1.remainingMs), 9000);
+  assert.equal(sample1.label, '~9s left');
+
+  // Smoothing with previous estimate
+  const sample2 = calculatePdfEta({
+    current: 21,
+    total: 100,
+    elapsedMs: 2000,
+    prevRemainingMs: sample1.remainingMs,
+  });
+  // 0.65 * 9000 + 0.35 * 8000 = 8650ms => ~9s left
+  assert.equal(Math.round(sample2.remainingMs), 8650);
+  assert.equal(sample2.label, '~9s left');
 });

@@ -97,21 +97,21 @@ function ZoomControl({ scale, pageScale, setZoom }) {
       </select>
       <button
         type="button"
+        className="zoom-btn zoom-fit-btn"
+        onClick={() => setZoom(1)}
+        title="Reset zoom (fit to page)"
+        aria-label="Reset zoom"
+      >
+        <Maximize2 size={15} />
+      </button>
+      <button
+        type="button"
         className="zoom-btn"
         onClick={() => stepZoom(1)}
         aria-label="Zoom in"
         title="Zoom in (+25%)"
       >
         <Plus size={16} />
-      </button>
-      <button
-        type="button"
-        className="zoom-btn zoom-fit-btn"
-        onClick={() => setZoom(1)}
-        title="Fit to screen"
-        aria-label="Fit to screen"
-      >
-        <Maximize2 size={15} />
       </button>
     </div>
   );
@@ -124,6 +124,7 @@ export function PreviewStage({
   onPageChange,
   onOpenSettings,
   reflowing,
+  mobileActions,
 }) {
   const stageRef = useRef(null);
   const innerRef = useRef(null);
@@ -131,6 +132,18 @@ export function PreviewStage({
   const [zoom, setZoom] = useState(1);
   const [domOverflow, setDomOverflow] = useState(false);
   const sheetRef = useRef(null);
+
+  const prevPageRef = useRef(currentPage);
+  const [animKey, setAnimKey] = useState(0);
+  const [slideDir, setSlideDir] = useState('right');
+
+  useEffect(() => {
+    if (currentPage !== prevPageRef.current) {
+      setSlideDir(currentPage > prevPageRef.current ? 'right' : 'left');
+      setAnimKey((k) => k + 1);
+      prevPageRef.current = currentPage;
+    }
+  }, [currentPage]);
 
   useLayoutEffect(() => {
     const el = stageRef.current;
@@ -224,7 +237,11 @@ export function PreviewStage({
             </div>
           )}
           {result && page && (
-            <div className="paper-frame" style={{ width: `${pageWidth}px`, height: `${pageHeight}px` }}>
+            <div
+              key={animKey}
+              className={`paper-frame ${slideDir === 'right' ? 'slide-right' : 'slide-left'}`}
+              style={{ width: `${pageWidth}px`, height: `${pageHeight}px` }}
+            >
               <div className="paper-clip">
                 <div
                   className="paper-scaler"
@@ -270,13 +287,29 @@ export function PreviewStage({
         </div>
       )}
 
-      <div className="preview-toolbar">
-        <div className="preview-toolbar-left">
-          {result && <PageNavigator currentPage={currentPage} pageCount={result.pageCount} onChange={onPageChange} />}
-        </div>
-        <div className="preview-toolbar-right">
-          <ZoomControl scale={scale} pageScale={pageScale} setZoom={setZoom} />
-        </div>
+      <div className={`preview-toolbar${mobileActions ? ' is-mobile-dock' : ''}`}>
+        {mobileActions ? (
+          <>
+            <div className="preview-toolbar-row preview-toolbar-nav-row">
+              <div className="preview-toolbar-left" />
+              <div className="preview-toolbar-right">
+                <ZoomControl scale={scale} pageScale={pageScale} setZoom={setZoom} />
+                {result && <PageNavigator currentPage={currentPage} pageCount={result.pageCount} onChange={onPageChange} />}
+              </div>
+            </div>
+            <div className="preview-toolbar-row preview-toolbar-actions-row">
+              {mobileActions}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="preview-toolbar-left" />
+            <div className="preview-toolbar-right">
+              <ZoomControl scale={scale} pageScale={pageScale} setZoom={setZoom} />
+              {result && <PageNavigator currentPage={currentPage} pageCount={result.pageCount} onChange={onPageChange} />}
+            </div>
+          </>
+        )}
       </div>
     </section>
   );

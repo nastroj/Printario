@@ -1193,6 +1193,7 @@ export async function exportSongbookPdf({
 
   let lastProgressAt = 0;
   let lastYieldAt = performance.now();
+  const renderStartedAt = performance.now();
 
   if (!isPro) {
     for (let i = 0; i < pages.length; i += 1) {
@@ -1212,6 +1213,7 @@ export async function exportSongbookPdf({
           current: i + 1,
           total: pages.length,
           pageName,
+          elapsedMs: now - renderStartedAt,
         });
       }
 
@@ -1246,6 +1248,7 @@ export async function exportSongbookPdf({
           current: sIdx + 1,
           total: sheets.length,
           pageName: `Sheet ${sIdx + 1}${sheetPagesLabel ? ` (${sheetPagesLabel})` : ''}`,
+          elapsedMs: now - renderStartedAt,
         });
       }
 

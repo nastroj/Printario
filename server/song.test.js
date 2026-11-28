@@ -4,7 +4,7 @@ import { buildBookModel, buildSongModel } from '../src/lib/song.js';
 import { paginateBook } from '../src/lib/paginate.js';
 import {
   DEFAULT_MARGINS, DEFAULT_SETTINGS, getColumnCount, getGeometry, getPageMargins, getTypeScale,
-  loadSettings,
+  loadSettings, sortDrawerEntries,
 } from '../src/lib/settings.js';
 
 function songWith(tokens, title = '1.') {
@@ -373,4 +373,38 @@ test('custom paper size resolves dimensions directly and clamps in loadSettings'
   } finally {
     globalThis.localStorage = prevStorage;
   }
+});
+
+test('sortDrawerEntries sorts by number, song name, and artist with ascending/descending order', () => {
+  const entries = [
+    { index: 0, number: 1, name: 'Morning Rail', author: 'Zebra Folk' },
+    { index: 1, number: 2, name: 'Lantern Song', author: 'Middle Band' },
+    { index: 2, number: 3, name: 'Paper Boat', author: 'Alpha Duo' },
+    { index: 3, number: 4, name: 'Acoustic Sketch', author: null },
+  ];
+
+  assert.deepEqual(
+    sortDrawerEntries(entries, 'number', 'asc').map((item) => item.number),
+    [1, 2, 3, 4],
+  );
+  assert.deepEqual(
+    sortDrawerEntries(entries, 'number', 'desc').map((item) => item.number),
+    [4, 3, 2, 1],
+  );
+  assert.deepEqual(
+    sortDrawerEntries(entries, 'title', 'asc').map((item) => item.name),
+    ['Acoustic Sketch', 'Lantern Song', 'Morning Rail', 'Paper Boat'],
+  );
+  assert.deepEqual(
+    sortDrawerEntries(entries, 'title', 'desc').map((item) => item.name),
+    ['Paper Boat', 'Morning Rail', 'Lantern Song', 'Acoustic Sketch'],
+  );
+  assert.deepEqual(
+    sortDrawerEntries(entries, 'author', 'asc').map((item) => item.name),
+    ['Paper Boat', 'Lantern Song', 'Morning Rail', 'Acoustic Sketch'],
+  );
+  assert.deepEqual(
+    sortDrawerEntries(entries, 'author', 'desc').map((item) => item.name),
+    ['Morning Rail', 'Lantern Song', 'Paper Boat', 'Acoustic Sketch'],
+  );
 });

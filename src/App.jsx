@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, Download, Info, ListMusic, Plus, Printer, Settings2, Sparkles, X,
+  AlertTriangle, Download, Info, ListMusic, Plus, Settings2, Sparkles, X,
 } from 'lucide-react';
 import { ImportScreen } from './components/ImportScreen.jsx';
 import { PreviewStage } from './components/PreviewStage.jsx';
@@ -84,8 +84,30 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function StudioHeader({
-  book,
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => (
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(max-width: 720px)').matches
+      : false
+  ));
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const mql = window.matchMedia('(max-width: 720px)');
+    const onChange = (event) => setIsMobile(event.matches);
+    setIsMobile(mql.matches);
+    if (typeof mql.addEventListener === 'function') {
+      mql.addEventListener('change', onChange);
+      return () => mql.removeEventListener('change', onChange);
+    }
+    mql.addListener(onChange);
+    return () => mql.removeListener(onChange);
+  }, []);
+
+  return isMobile;
+}
+
+function StudioActions({
   onNewBook,
   installPrompt,
   onInstall,
@@ -94,9 +116,59 @@ function StudioHeader({
   settingsOpen,
   overflowCount,
   onDownloadPdf,
-  onPrint,
   busy,
 }) {
+  return (
+    <div className="studio-actions">
+      <button type="button" className="btn btn-ghost" onClick={onNewBook} aria-label="New songbook">
+        <Plus size={16} /> <span>New</span>
+      </button>
+      <button
+        type="button"
+        className={`btn btn-ghost toolbar-button settings-toggle-button${settingsOpen ? ' is-active' : ''}`}
+        onClick={onToggleSettings}
+        aria-expanded={settingsOpen}
+      >
+        <Settings2 size={16} />
+        <span>Settings</span>
+      </button>
+      <span className="header-sep" aria-hidden="true" />
+      {installPrompt && (
+        <button type="button" className="btn btn-ghost" onClick={onInstall}>
+          <Download size={16} /> <span>Install</span>
+        </button>
+      )}
+      <button
+        type="button"
+        className="btn btn-ghost toolbar-button contents-toggle-button"
+        onClick={onOpenContents}
+        title={overflowCount > 0
+          ? `${overflowCount} ${overflowCount === 1 ? 'song clips' : 'songs clip'} past the bottom margin`
+          : undefined}
+      >
+        <ListMusic size={16} />
+        <span>Contents</span>
+        {overflowCount > 0 && (
+          <span className="toolbar-warn-badge" aria-label={`${overflowCount} songs clip`}>
+            <AlertTriangle size={10} strokeWidth={2.4} aria-hidden="true" />
+            {overflowCount}
+          </span>
+        )}
+      </button>
+      <button
+        type="button"
+        className="btn btn-primary header-pdf"
+        onClick={onDownloadPdf}
+        disabled={busy}
+        title="Export PDF"
+      >
+        <Download size={16} /> <span>PDF</span>
+      </button>
+    </div>
+  );
+}
+
+function StudioHeader({ book, actions }) {
   return (
     <header className="studio-header">
       <div className="studio-brand">
@@ -107,60 +179,13 @@ function StudioHeader({
           <strong>{book.name}</strong>
         </div>
       </div>
-      <div className="studio-actions">
-        <button
-          type="button"
-          className="btn btn-ghost toolbar-button"
-          onClick={onOpenContents}
-          title={overflowCount > 0
-            ? `${overflowCount} ${overflowCount === 1 ? 'song clips' : 'songs clip'} past the bottom margin`
-            : undefined}
-        >
-          <ListMusic size={16} />
-          <span>Contents</span>
-          {overflowCount > 0 && (
-            <span className="toolbar-warn-badge" aria-label={`${overflowCount} songs clip`}>
-              <AlertTriangle size={10} strokeWidth={2.4} aria-hidden="true" />
-              {overflowCount}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          className={`btn btn-ghost toolbar-button settings-toggle-button${settingsOpen ? ' is-active' : ''}`}
-          onClick={onToggleSettings}
-          aria-expanded={settingsOpen}
-        >
-          <Settings2 size={16} />
-          <span>Settings</span>
-        </button>
-        <span className="header-sep" aria-hidden="true" />
-        {installPrompt && (
-          <button type="button" className="btn btn-ghost" onClick={onInstall}>
-            <Download size={16} /> <span>Install</span>
-          </button>
-        )}
-        <button type="button" className="btn btn-ghost" onClick={onNewBook} aria-label="New songbook">
-          <Plus size={16} /> <span>New</span>
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary header-pdf"
-          onClick={onDownloadPdf}
-          disabled={busy}
-          title="Download PDF directly"
-        >
-          <Download size={16} /> <span>PDF</span>
-        </button>
-        <button type="button" className="btn btn-primary header-print" onClick={onPrint} disabled={busy}>
-          <Printer size={16} /> <span>Print</span>
-        </button>
-      </div>
+      {actions}
     </header>
   );
 }
 
 export default function App() {
+  const isMobile = useIsMobile();
   const [settings, setSettings] = useState(loadSettings);
   const [sourceData, setSourceData] = useState(null);
   const [result, setResult] = useState(null);
@@ -532,27 +557,32 @@ export default function App() {
     );
   }
 
+  const studioActions = (
+    <StudioActions
+      onNewBook={newBook}
+      installPrompt={installPrompt}
+      onInstall={install}
+      onOpenContents={() => {
+        setSettingsOpen(false);
+        setDrawerOpen(true);
+      }}
+      onToggleSettings={() => {
+        setDrawerOpen(false);
+        setSettingsOpen((open) => !open);
+      }}
+      settingsOpen={settingsOpen}
+      overflowCount={result?.overflowCount ?? 0}
+      onDownloadPdf={handleOpenPdfExport}
+      busy={!result || settingsPending || Boolean(pdfProgress)}
+    />
+  );
+
   return (
     <>
       <div className="app-shell">
         <StudioHeader
           book={book}
-          onNewBook={newBook}
-          installPrompt={installPrompt}
-          onInstall={install}
-          onOpenContents={() => {
-            setSettingsOpen(false);
-            setDrawerOpen(true);
-          }}
-          onToggleSettings={() => {
-            setDrawerOpen(false);
-            setSettingsOpen((open) => !open);
-          }}
-          settingsOpen={settingsOpen}
-          overflowCount={result?.overflowCount ?? 0}
-          onDownloadPdf={handleOpenPdfExport}
-          onPrint={handlePrint}
-          busy={!result || settingsPending || Boolean(pdfProgress)}
+          actions={isMobile ? null : studioActions}
         />
         <div className="studio-body">
           <PreviewStage
@@ -565,6 +595,7 @@ export default function App() {
               setSettingsOpen(true);
             }}
             reflowing={settingsPending}
+            mobileActions={isMobile ? studioActions : null}
           />
         </div>
 
@@ -605,6 +636,9 @@ export default function App() {
         isOpen={pdfExportOpen}
         result={result}
         settings={settings}
+        reflowing={settingsPending}
+        onUpdateSettings={updateSetting}
+        onSetMargin={updateMargins}
         onChangePdfOptions={(nextOpts) => updateSetting('pdfExport', nextOpts)}
         onExport={handleDownloadPdf}
         onClose={() => setPdfExportOpen(false)}
