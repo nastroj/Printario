@@ -8,22 +8,51 @@ export function PageSetupFields({ settings, update, setMargin, showPrintNote = f
 
   return (
     <>
-      <SelectControl
-        label="Paper size"
-        hint={settings.paper === 'Custom'
-          ? `${layoutGeometry.widthMm} × ${layoutGeometry.heightMm} mm`
-          : geometry.hint}
-        value={settings.paper}
-        ariaLabel="Paper size"
-        onChange={(value) => update('paper', value)}
-        options={Object.entries(PAPER_SIZES).map(([value, item]) => ({
-          value,
-          label: value === 'Custom' ? item.label : `${item.label} (${item.hint})`,
-        }))}
-      />
+      <div className="pdf-pro-row">
+        <SelectControl
+          label="Paper size"
+          hint={settings.paper === 'Custom'
+            ? `${layoutGeometry.widthMm} × ${layoutGeometry.heightMm} mm`
+            : geometry.hint}
+          value={settings.paper}
+          ariaLabel="Paper size"
+          onChange={(value) => update('paper', value)}
+          options={Object.entries(PAPER_SIZES).map(([value, item]) => ({
+            value,
+            label: value === 'Custom' ? item.label : `${item.label} (${item.hint})`,
+          }))}
+        />
+        <div>
+          <span className="control-label"><span>Orientation</span></span>
+          <Segmented
+            value={settings.orientation}
+            columns={2}
+            ariaLabel="Paper orientation"
+            onChange={(value) => {
+              if (settings.paper === 'Custom') {
+                const w = layoutGeometry.widthMm;
+                const h = layoutGeometry.heightMm;
+                if ((value === 'portrait' && w > h) || (value === 'landscape' && w < h)) {
+                  update({
+                    orientation: value,
+                    customPaperWidth: h,
+                    customPaperHeight: w,
+                  });
+                  return;
+                }
+              }
+              update('orientation', value);
+            }}
+            options={[
+              { value: 'portrait', label: 'Portrait', icon: <span className="orientation-icon portrait" /> },
+              { value: 'landscape', label: 'Landscape', icon: <span className="orientation-icon landscape" /> },
+            ]}
+          />
+        </div>
+      </div>
 
       {settings.paper === 'Custom' && (
-        <div className="margin-grid custom-paper-grid">
+        <div className="pdf-pro-row" style={{ marginTop: '10px' }}>
           <StepperControl
             label="Width"
             hint="mm"
@@ -56,32 +85,6 @@ export function PageSetupFields({ settings, update, setMargin, showPrintNote = f
           />
         </div>
       )}
-
-      <span className="control-label spaced"><span>Orientation</span></span>
-      <Segmented
-        value={settings.orientation}
-        columns={2}
-        ariaLabel="Paper orientation"
-        onChange={(value) => {
-          if (settings.paper === 'Custom') {
-            const w = layoutGeometry.widthMm;
-            const h = layoutGeometry.heightMm;
-            if ((value === 'portrait' && w > h) || (value === 'landscape' && w < h)) {
-              update({
-                orientation: value,
-                customPaperWidth: h,
-                customPaperHeight: w,
-              });
-              return;
-            }
-          }
-          update('orientation', value);
-        }}
-        options={[
-          { value: 'portrait', label: 'Portrait', icon: <span className="orientation-icon portrait" /> },
-          { value: 'landscape', label: 'Landscape', icon: <span className="orientation-icon landscape" /> },
-        ]}
-      />
 
       <span className="control-label spaced">
         <span>Columns</span>
